@@ -1,0 +1,192 @@
+# ------------------------------
+# OS / Filesystem noise
+# ------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.Spotlight-V100/
+.Trashes/
+
+# ------------------------------
+# Editor / IDE settings
+# ------------------------------
+.vscode/
+.idea/
+*.code-workspace
+*.suo
+*.user
+*.userossc
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# ------------------------------
+# Logs and runtime files
+# ------------------------------
+*.log
+*.out
+*.err
+*.pid
+*.pid.lock
+*.seed
+*.stackdump
+
+# ------------------------------
+# Environment / local config
+# Keep example env files tracked
+# ------------------------------
+.env
+.env.*
+!.env.example
+!.env.template
+.python-version
+
+# ------------------------------
+# Python bytecode / caches
+# ------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.dmypy.json
+dmypy.json
+
+# ------------------------------
+# Python packaging / build artifacts
+# ------------------------------
+build/
+dist/
+site/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+# ------------------------------
+# Python virtual environments
+# ------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# ------------------------------
+# Python test / coverage outputs
+# ------------------------------
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+*.cover
+*.py,cover
+
+# ------------------------------
+# Jupyter / notebooks
+# ------------------------------
+.ipynb_checkpoints/
+
+# ------------------------------
+# C / C++ compiled objects and binaries
+# ------------------------------
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.elf
+*.bin
+*.pdb
+*.idb
+*.ilk
+*.dSYM/
+
+# ------------------------------
+# CMake
+# ------------------------------
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+CTestTestfile.cmake
+cmake_install.cmake
+install_manifest.txt
+
+# ------------------------------
+# Make / Autotools
+# ------------------------------
+# Makefile
+makedep*
+libtool
+aclocal.m4
+m4/
+autom4te.cache/
+
+# ------------------------------
+# Ninja / Meson / Bazel
+# ------------------------------
+.ninja_deps
+.ninja_log
+.mesonpy-native-file.ini
+.mesonpy-cross-file.ini
+.mesonpy-*/
+.cache/
+bazel-*
+
+# ------------------------------
+# Generic build / output directories
+# ------------------------------
+out/
+output/
+release/
+Release/
+debug/
+Debug/
+tmp/
+temp/
+
+# ------------------------------
+# Profiling / debug / analysis outputs
+# ------------------------------
+gmon.out
+callgrind.out.*
+massif.out.*
+perf.data
+perf.data.*
+
+# ------------------------------
+# Documentation builds
+# ------------------------------
+docs/_build/
+
+# ------------------------------
+# Package managers
+# ------------------------------
+.pdm-build/
+.pdm-python/
+.pdm.toml
+__pypackages__/
+
+# ------------------------------
+# Optional generated data
+# Uncomment if needed for your workflow
+# ------------------------------
+# data/
+# results/
+# figures/
