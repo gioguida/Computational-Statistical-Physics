@@ -41,7 +41,7 @@ class Trajectory:
         hit_y = detector_radius * np.sin(hit_angle)
         return (hit_x, hit_y)
     
-    
+
 class Detector:
     def __init__(
             self,
@@ -99,7 +99,6 @@ class Detector:
                         "layer_radius": float(layer_radius),
                         "hit_x": float(hit_x),
                         "hit_y": float(hit_y),
-                        "hit_phi": float(np.arctan2(hit_y, hit_x)),
                     }
                 )
 
