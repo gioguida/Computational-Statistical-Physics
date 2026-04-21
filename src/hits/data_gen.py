@@ -62,6 +62,7 @@ def main():
     all_hits = pd.concat([noisy_hits, fake_hits], ignore_index=True)
     all_hits = all_hits.sort_values(["layer_id", "track_id"]).reset_index(drop=True)
 
+    # Save the files
     data_dir = Path(__file__).resolve().parents[2] / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 

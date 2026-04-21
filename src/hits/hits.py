@@ -43,6 +43,7 @@ class Trajectory:
     
 
 class Detector:
+    """ Class representing a multi-layer detector detecing particle hits"""
     def __init__(
             self,
             detector_radii: List,
