@@ -114,7 +114,7 @@ seg_vec_t create_segments(hit_group_t grouped) {
     while(grouped.count(n_layers) > 0) {
         ++n_layers;
     }
-    
+
     // Calculate total number of segments
     int N_segments = 0;
     for(int l = 0; l < n_layers - 1; ++l) {
@@ -143,8 +143,7 @@ interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, doubl
     for(int i = 0; i < N_segments; ++i) {
         std::vector<std::pair<int, double>> J_i;
         for(int j = i + 1; j < N_segments; ++j) {
-
-            
+ 
             if( // potentially aligned segments
                 ((segments[i].layer_b == segments[j].layer_a) &&
                     (segments[i].hit_b == segments[j].hit_a)) ||
@@ -156,7 +155,6 @@ interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, doubl
                 reward = reward > std::cos(theta_max) ? reward : 0.0;
                 J[i].emplace_back(std::pair<int,double>{j, reward});
                 J[j].emplace_back(std::pair<int,double>{i, reward});
-
 
             } else if( // merged segments
                 (segments[i].layer_b == segments[j].layer_b) &&
