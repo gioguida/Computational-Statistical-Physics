@@ -195,30 +195,30 @@ int main() {
     // std::cout << grouped[4].size() << std::endl;
 
     // Print J matrix (sparse, upper triangle only)
-    std::cout << "\n=== J Matrix (nonzero entries) ===\n";
-    std::cout << std::setw(6) << "i"
-            << std::setw(6) << "j"
-            << std::setw(12) << "J_ij"
-            << std::setw(14) << "type" << "\n";
-    std::cout << std::string(38, '-') << "\n";
+    // std::cout << "\n=== J Matrix (nonzero entries) ===\n";
+    // std::cout << std::setw(6) << "i"
+    //         << std::setw(6) << "j"
+    //         << std::setw(12) << "J_ij"
+    //         << std::setw(14) << "type" << "\n";
+    // std::cout << std::string(38, '-') << "\n";
 
-    for (int i = 0; i < segments.size(); i++) {
-        for (auto& [j, val] : J[i]) {
-            if (j <= i) continue;  // upper triangle only
+    // for (int i = 0; i < segments.size(); i++) {
+    //     for (auto& [j, val] : J[i]) {
+    //         if (j <= i) continue;  // upper triangle only
 
-            std::string type;
-            if (segments[i].hit_a == segments[j].hit_a ||
-                segments[i].hit_b == segments[j].hit_b)
-                type = "COMPETING";
-            else
-                type = "ALIGNED";
+    //         std::string type;
+    //         if (segments[i].hit_a == segments[j].hit_a ||
+    //             segments[i].hit_b == segments[j].hit_b)
+    //             type = "COMPETING";
+    //         else
+    //             type = "ALIGNED";
 
-            std::cout << std::setw(6) << i
-                    << std::setw(6) << j
-                    << std::setw(12) << std::fixed << std::setprecision(4) << val
-                    << std::setw(14) << type << "\n";
-        }
-    }
-    std::cout << std::string(38, '-') << "\n";
+    //         std::cout << std::setw(6) << i
+    //                 << std::setw(6) << j
+    //                 << std::setw(12) << std::fixed << std::setprecision(4) << val
+    //                 << std::setw(14) << type << "\n";
+    //     }
+    // }
+    // std::cout << std::string(38, '-') << "\n";
     std::cout << "Total segments: " << segments.size() << "\n";
 }

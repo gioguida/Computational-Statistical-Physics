@@ -44,6 +44,4 @@ seg_vec_t create_segments(hit_group_t);
 
 interaction_mat_t interaction_matrix(seg_vec_t, double, double);
 
-
-
 #endif

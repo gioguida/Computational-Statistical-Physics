@@ -6,11 +6,11 @@ from .hits import Detector
 
 class DataConfig:
     # particles parameters
-    n_particles             = 3
+    n_particles             = 20
     traj_radius_low         = 4
     traj_radius_high        = 20
     # detector parameters
-    detector_layers         = [1, 2, 3]
+    detector_layers         = [1, 2, 3, 4, 5]
     # Resolution noise (gaussian)
     sigma_res               = 0    # 0.05
     # Backgorund noise (fake hits)
