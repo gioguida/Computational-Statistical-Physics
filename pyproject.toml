@@ -1,0 +1,10 @@
+[project]
+name = "particle_track_reconstruction"
+version = "0.1.0"
+description = "Particle track reconstruction as a spin glass problem using simulated annealing"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+]

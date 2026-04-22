@@ -6,19 +6,24 @@ from .hits import Detector
 
 class DataConfig:
     # particles parameters
-    n_particles = 50
-    traj_radius_low = 4
-    traj_radius_high = 20
+    n_particles             = 3
+    traj_radius_low         = 4
+    traj_radius_high        = 20
     # detector parameters
-    detector_layers = [1, 2, 3, 4, 5]
+    detector_layers         = [1, 2, 3]
     # Resolution noise (gaussian)
-    sigma_res = 0.05
+    sigma_res               = 0    # 0.05
     # Backgorund noise (fake hits)
-    mean_fakes_per_layer = 2
+    mean_fakes_per_layer    = 0    # 2
 
 
 def main():
     cfg = DataConfig
+
+    print("--- Generating hits ---")
+    print(f" #particles={cfg.n_particles}")
+    print(f" detector_layers={cfg.detector_layers}")
+
     experiment = Detector(cfg.detector_layers, cfg.n_particles, cfg.traj_radius_low, cfg.traj_radius_high)
     clean_hits = experiment.get_hits()
     n_real_hits = len(clean_hits)
@@ -73,6 +78,8 @@ def main():
     ground_truth_hits.to_csv(ground_truth_path, index=False)
     training_hits = all_hits.drop(columns=["track_id"]).copy()
     training_hits.to_csv(training_path, index=False)
+
+    print(" hits saved!")
 
 
 if __name__ == "__main__":

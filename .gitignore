@@ -185,6 +185,9 @@ docs/_build/
 # ------------------------------
 # Package managers
 # ------------------------------
+.uv/
+.uv-cache/
+uv.lock
 .pdm-build/
 .pdm-python/
 .pdm.toml
