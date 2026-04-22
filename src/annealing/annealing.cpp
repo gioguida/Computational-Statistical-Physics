@@ -9,7 +9,7 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
 
     std::filesystem::create_directory("../../results");
     
-    std::cout << "--- Starting simulation ---" << std::endl;
+    std::cout << "--- Starting Simulated Annealing ---" << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
 
     // Express smulation iterations in sweeps
