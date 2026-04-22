@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <stdexcept>
+#include <iomanip>
 
 
 Hit::Hit(int idx, int layer_idx, double layer_r, double x_hit, double y_hit)
@@ -27,12 +28,18 @@ Segment::Segment(Hit a, int a_id, Hit b, int b_id, int seg_idx)
 
 
 double dot(Segment s_i, Segment s_j) {
-    /* TODO */
+    double prod_x = s_i.dx * s_j.dx; 
+    double prod_y = s_i.dy * s_j.dy;
+    
+    return prod_x + prod_y;
 }
 
 
-double cos(Segment s_i, Segment s_j) {
-    /* TODO */
+double seg_alignment(Segment s_i, Segment s_j) {
+    double dot_prod = dot(s_i, s_j);
+    double norm_i = std::sqrt(dot(s_i,s_i));
+    double norm_j = std::sqrt(dot(s_j,s_j));
+    return dot_prod / (norm_i * norm_j);
 }
 
 
@@ -104,58 +111,116 @@ seg_vec_t create_segments(hit_group_t grouped) {
 
     // find number of detector layers
     int n_layers = 0;
-    int N_segments = 0;
     while(grouped.count(n_layers) > 0) {
-        n_layers++;
-        N_segments += grouped[n_layers-1].size() * grouped[n_layers].size();
+        ++n_layers;
+    }
+    
+    // Calculate total number of segments
+    int N_segments = 0;
+    for(int l = 0; l < n_layers - 1; ++l) {
+        N_segments += grouped[l].size() * grouped[l+1].size();
     }
 
     segments.reserve(N_segments);
     int seg_count = 0;
 
     for(int l = 0; l < n_layers - 1; ++l) {
-        int count_a = 0;
-        int count_b = 0;
         for(auto const& hit_a : grouped[l]) {
             for(auto const& hit_b : grouped[l+1]) {
-                segments.emplace_back(hit_a, count_a, hit_b, count_b, seg_count);
-                count_b++;
+                segments.emplace_back(hit_a, hit_a.id, hit_b, hit_b.id, seg_count); 
                 seg_count++;
             }
-            count_a++;
         }
-    }   
+    }  
+    
+    return segments;
 }
 
-interaction_mat_t interaction_matrix(seg_vec_t segments) {
-    interaction_mat_t J;
+interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, double penalty) {
     int N_segments = segments.size();
+    interaction_mat_t J(N_segments);
 
-    for(int i=0; i < N_segments - 1; ++i) {
+    for(int i = 0; i < N_segments; ++i) {
         std::vector<std::pair<int, double>> J_i;
-        for(int j=i+1; j < N_segments; ++j) {
-            if((segments[i].layer_b == segments[j].layer_a) &&
-            (segments[i].hit_b == segments[j].hit_a)) {
-                // implement reward computation
-                double reward = 1.0;
-                J_i.emplace_back(std::pair<int,double>{j, reward});
+        for(int j = i + 1; j < N_segments; ++j) {
+
+            
+            if( // potentially aligned segments
+                ((segments[i].layer_b == segments[j].layer_a) &&
+                    (segments[i].hit_b == segments[j].hit_a)) ||
+                ((segments[j].layer_b == segments[i].layer_a) &&
+                    (segments[j].hit_b == segments[i].hit_a))
+            ) {
+                double reward = seg_alignment(segments[i], segments[j]);
+                // check if the angle is below the threshold
+                reward = reward > std::cos(theta_max) ? reward : 0.0;
+                J[i].emplace_back(std::pair<int,double>{j, reward});
+                J[j].emplace_back(std::pair<int,double>{i, reward});
+
+
+            } else if( // merged segments
+                (segments[i].layer_b == segments[j].layer_b) &&
+                    (segments[i].hit_b == segments[j].hit_b)
+            ) {
+                J[i].emplace_back(std::pair<int,double>{j, -penalty});
+                J[j].emplace_back(std::pair<int,double>{i, -penalty});
+
+            } else if( // forked segments
+                (segments[i].layer_a == segments[j].layer_a) &&
+                    (segments[i].hit_a == segments[j].hit_a)
+            ) {
+                J[i].emplace_back(std::pair<int,double>{j, -penalty});
+                J[j].emplace_back(std::pair<int,double>{i, -penalty});
             }
         }
-        J.push_back(J_i);
     }
+    return J;
 }
-
-
-
 
 
 int main() {
+    double theta_max = std::acos(-1) / 6.0; // 30°
+    double lambda = 10;
     hit_vec_t hits = read_hits();
+    std::cout << " 1. hits read" << std::endl;
     hit_group_t grouped = group_hits_by_layer(hits);
+    std::cout << " 2. groups formed" << std::endl;
+    seg_vec_t segments = create_segments(grouped);
+    std::cout << " 3. segments created" << std::endl;
+    interaction_mat_t J = interaction_matrix(segments, theta_max, lambda);
+    std::cout << " 4. Matrix formed" << std::endl;
 
-    std::cout << grouped[0].size() << std::endl;
-    std::cout << grouped[1].size() << std::endl;
-    std::cout << grouped[2].size() << std::endl;
-    std::cout << grouped[3].size() << std::endl;
-    std::cout << grouped[4].size() << std::endl;
+    // std::cout << grouped[0].size() << std::endl;
+    // std::cout << grouped[1].size() << std::endl;
+    // std::cout << grouped[2].size() << std::endl;
+    // std::cout << grouped[3].size() << std::endl;
+    // std::cout << grouped[4].size() << std::endl;
+
+    // Print J matrix (sparse, upper triangle only)
+    std::cout << "\n=== J Matrix (nonzero entries) ===\n";
+    std::cout << std::setw(6) << "i"
+            << std::setw(6) << "j"
+            << std::setw(12) << "J_ij"
+            << std::setw(14) << "type" << "\n";
+    std::cout << std::string(38, '-') << "\n";
+
+    for (int i = 0; i < segments.size(); i++) {
+        for (auto& [j, val] : J[i]) {
+            if (j <= i) continue;  // upper triangle only
+
+            std::string type;
+            if (segments[i].hit_a == segments[j].hit_a ||
+                segments[i].hit_b == segments[j].hit_b)
+                type = "COMPETING";
+            else
+                type = "ALIGNED";
+
+            std::cout << std::setw(6) << i
+                    << std::setw(6) << j
+                    << std::setw(12) << std::fixed << std::setprecision(4) << val
+                    << std::setw(14) << type << "\n";
+        }
+    }
+    std::cout << std::string(38, '-') << "\n";
+    std::cout << "Total segments: " << segments.size() << "\n";
 }
