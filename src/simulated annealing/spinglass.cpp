@@ -15,10 +15,11 @@ void Spinglass::compute_initial_energy() {
         for(int k = 0; k < J_[i].size(); ++k) {
             int j = J_[i][k].first;
             // H = -sum_ij J_ij * s_i * s_j - sum_i h_i * s_i
-            hamiltonian += J_[i][k].second * configuration_[i] * configuration_[j];
+            hamiltonian += 0.5 * J_[i][k].second * configuration_[i] * configuration_[j];
         }
         hamiltonian -= h_[i] * configuration_[i];
     }
+    E_ = -hamiltonian;
 };
 
 
@@ -42,7 +43,7 @@ double Spinglass::deltaE(int const& site) const {
     double dE = 0.;
 
     for(int k = 0; k < J_[site].size(); ++k) {
-        dE += (-2 * s_i) * configuration_[J_[site][k].first];
+        dE += (2 * s_i) * J_[site][k].second * configuration_[J_[site][k].first];
     }
 
     dE += 2*h_[site]* s_i; 
@@ -52,7 +53,7 @@ double Spinglass::deltaE(int const& site) const {
 
 void Spinglass::step() {
     // randomly select new site
-    std::uniform_int_distribution<> unif_int(0, N_*N_-1);
+    std::uniform_int_distribution<> unif_int(0, N_-1);
     int site = unif_int(rng_);
 
     // compute the energy difference
