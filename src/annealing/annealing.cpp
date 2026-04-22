@@ -1,15 +1,19 @@
 #include"annealing.hpp"
+#include<list>
+#include <algorithm>
 
+
+#define N_energy 5
 
 std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double> h, 
-    double T_min, double T_max, double T_step, 
+    double T_min, double T_max, double T_step, double toll,
     int N_sweeps_eq, int N_sweeps_meas, int seed) {
     // set simulation parameters
     int N_temp = static_cast<int>((T_max - T_min)/T_step);
 
     std::filesystem::create_directory("../../results");
     
-    std::cout << "--- Starting Simulated Annealing ---" << std::endl;
+    std::cout << "--- Starting simulation ---" << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
 
     // Express smulation iterations in sweeps
@@ -32,7 +36,13 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
     }
 
     std::cout << "--- Beginning Simulation ---" << std::endl;
-    for(int t = 0; t < N_temp; ++t) {
+
+    std::list<double> energy_list;
+    int t = 0;
+    double dev = toll + 1;
+
+    while(t < N_temp && toll < dev ) {
+
         double T = T_max - t*T_step;
         model.set_T(T);
 
@@ -44,6 +54,19 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
         for(int i = 0; i < N_eq; ++i) {
             model.step();
         }
+        
+        energy_list.push_back(model.get_energy());
+        if (t > N_energy)   energy_list.pop_front();
+
+        double temp = 0;
+        for (auto it = energy_list.begin(); it != energy_list.end(); ++it){
+            
+            temp = std::max(temp, std::abs(*it - *(std::next(it))));
+        }
+        dev = temp;
+
+        ++t;
+
     }
 
     // compute simulation time
