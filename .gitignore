@@ -194,9 +194,10 @@ uv.lock
 __pypackages__/
 
 # ------------------------------
-# Claude code
+# Agents
 # ------------------------------
 .claude
+.codex
 
 # ------------------------------
 # Optional generated data

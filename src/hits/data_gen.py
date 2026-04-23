@@ -1,24 +1,71 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from dataclasses import dataclass, field
 
 from .hits import Detector
 
+try:
+    import yaml
+except ImportError as exc:
+    raise SystemExit(
+        "Missing dependency 'pyyaml'. Install dependencies first (e.g. `uv sync`)."
+    ) from exc
+
+
+@dataclass(frozen=True)
 class DataConfig:
     # particles parameters
-    n_particles             = 20
-    traj_radius_low         = 4
-    traj_radius_high        = 20
+    n_particles: int = 20
+    traj_radius_low: float = 4
+    traj_radius_high: float = 20
     # detector parameters
-    detector_layers         = [1, 2, 3, 4, 5]
+    detector_layers: list[float] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     # Resolution noise (gaussian)
-    sigma_res               = 0    # 0.05
+    sigma_res: float = 0.0  # 0.05
     # Backgorund noise (fake hits)
-    mean_fakes_per_layer    = 0    # 2
+    mean_fakes_per_layer: float = 0.0  # 2
+
+    @classmethod
+    def from_yaml(cls, config_path: Path | None = None) -> "DataConfig":
+        cfg = cls()
+        root = Path(__file__).resolve().parents[2]
+        cfg_path = config_path or (root / "scripts/config.yaml")
+        if not cfg_path.exists():
+            return cfg
+
+        with cfg_path.open("r", encoding="utf-8") as fh:
+            loaded = yaml.safe_load(fh) or {}
+
+        if not isinstance(loaded, dict):
+            raise ValueError(f"Config root must be a mapping in {cfg_path}")
+
+        generation = loaded.get("generation", {})
+        if not isinstance(generation, dict):
+            raise ValueError("generation section must be a mapping")
+
+        data_cfg = generation.get("data", {})
+        if not isinstance(data_cfg, dict):
+            raise ValueError("generation.data must be a mapping")
+
+        detector_layers = data_cfg.get("detector_layers", cfg.detector_layers)
+        if not isinstance(detector_layers, list) or len(detector_layers) == 0:
+            raise ValueError("generation.data.detector_layers must be a non-empty list")
+
+        return cls(
+            n_particles=int(data_cfg.get("n_particles", cfg.n_particles)),
+            traj_radius_low=float(data_cfg.get("traj_radius_low", cfg.traj_radius_low)),
+            traj_radius_high=float(data_cfg.get("traj_radius_high", cfg.traj_radius_high)),
+            detector_layers=[float(r) for r in detector_layers],
+            sigma_res=float(data_cfg.get("sigma_res", cfg.sigma_res)),
+            mean_fakes_per_layer=float(
+                data_cfg.get("mean_fakes_per_layer", cfg.mean_fakes_per_layer)
+            ),
+        )
 
 
 def main():
-    cfg = DataConfig
+    cfg = DataConfig.from_yaml()
 
     print("--- Generating hits ---")
     print(f" #particles={cfg.n_particles}")

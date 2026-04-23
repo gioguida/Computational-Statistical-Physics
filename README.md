@@ -75,6 +75,12 @@ All parameters are set in `scripts/config.yaml`:
 | `switches` | `generate` | `true` | Re-generate hit data |
 | `switches` | `interaction` | `true` | Run interaction stage |
 | `switches` | `anneal` | `true` | Run annealing stage |
+| `generation.data` | `n_particles` | `20` | Number of trajectories to generate |
+| `generation.data` | `traj_radius_low` | `4` | Minimum trajectory radius |
+| `generation.data` | `traj_radius_high` | `20` | Maximum trajectory radius |
+| `generation.data` | `detector_layers` | `[1,2,3,4,5]` | Detector layer radii |
+| `generation.data` | `sigma_res` | `0.0` | Gaussian position smearing |
+| `generation.data` | `mean_fakes_per_layer` | `0.0` | Poisson mean fake hits per layer |
 | `interaction` | `theta_max` | `0.5236` (π/6) | Max angle between aligned segments (rad) |
 | `interaction` | `penalty` | `10.0` | Coupling penalty for forks/merges |
 | `annealing` | `t_max` | `5.0` | Initial temperature |

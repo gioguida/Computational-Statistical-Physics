@@ -17,6 +17,13 @@ run:
 generation:
   enabled: true
   module: src.hits.data_gen
+  data:
+    n_particles: 20
+    traj_radius_low: 4
+    traj_radius_high: 20
+    detector_layers: [1, 2, 3, 4, 5]
+    sigma_res: 0.0
+    mean_fakes_per_layer: 0.0
 
 interaction:
   theta_max: 0.5235987755982988
