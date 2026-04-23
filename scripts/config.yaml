@@ -1,0 +1,31 @@
+switches:
+  build: true
+  generate: true
+  interaction: true
+  anneal: true
+
+build:
+  build_dir: build
+
+paths:
+  training_hits_csv: data/training_hits.csv
+  results_root: results/runs
+
+run:
+  run_id: auto  # set to an existing run folder for annealing-only runs
+
+generation:
+  enabled: true
+  module: src.hits.data_gen
+
+interaction:
+  theta_max: 0.5235987755982988
+  penalty: 10.0
+
+annealing:
+  t_min: 0.05
+  t_max: 5.0
+  t_step: 0.05
+  eq_sweeps: 50
+  meas_sweeps: 20
+  seed: 123
