@@ -82,7 +82,8 @@ All parameters are set in `scripts/config.yaml`:
 | `generation.data` | `sigma_res` | `0.0` | Gaussian position smearing |
 | `generation.data` | `mean_fakes_per_layer` | `0.0` | Poisson mean fake hits per layer |
 | `interaction` | `theta_max` | `0.5236` (π/6) | Max angle between aligned segments (rad) |
-| `interaction` | `penalty` | `10.0` | Coupling penalty for forks/merges |
+| `interaction` | `merge_penalty` | `10.0` | Coupling penalty for merge conflicts |
+| `interaction` | `fork_penalty` | `10.0` | Coupling penalty for fork conflicts |
 | `annealing` | `t_max` | `5.0` | Initial temperature |
 | `annealing` | `t_min` | `0.05` | Final temperature |
 | `annealing` | `t_step` | `0.05` | Cooling step |

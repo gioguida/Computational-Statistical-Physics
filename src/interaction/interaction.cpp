@@ -136,7 +136,7 @@ seg_vec_t create_segments(hit_group_t grouped) {
     return segments;
 }
 
-interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, double penalty) {
+interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, double merge_penalty, double fork_penalty) {
     int N_segments = segments.size();
     interaction_mat_t J(N_segments);
 
@@ -160,15 +160,15 @@ interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, doubl
                 (segments[i].layer_b == segments[j].layer_b) &&
                     (segments[i].hit_b == segments[j].hit_b)
             ) {
-                J[i].emplace_back(std::pair<int,double>{j, -penalty});
-                J[j].emplace_back(std::pair<int,double>{i, -penalty});
+                J[i].emplace_back(std::pair<int,double>{j, -merge_penalty});
+                J[j].emplace_back(std::pair<int,double>{i, -merge_penalty});
 
             } else if( // forked segments
                 (segments[i].layer_a == segments[j].layer_a) &&
                     (segments[i].hit_a == segments[j].hit_a)
             ) {
-                J[i].emplace_back(std::pair<int,double>{j, -penalty});
-                J[j].emplace_back(std::pair<int,double>{i, -penalty});
+                J[i].emplace_back(std::pair<int,double>{j, -fork_penalty});
+                J[j].emplace_back(std::pair<int,double>{i, -fork_penalty});
             }
         }
     }

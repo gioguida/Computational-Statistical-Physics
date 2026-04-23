@@ -27,7 +27,8 @@ generation:
 
 interaction:
   theta_max: 0.5235987755982988
-  penalty: 10.0
+  merge_penalty: 10.0
+  fork_penalty: 10.0
 
 annealing:
   t_min: 0.05

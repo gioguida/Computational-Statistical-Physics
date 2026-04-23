@@ -4,6 +4,7 @@
 #include "../interaction/interaction.hpp"
 
 #include <random>
+#include <stdexcept>
 
 class Spinglass {
     private:
@@ -18,6 +19,9 @@ class Spinglass {
     public:
         Spinglass(int N, interaction_mat_t J, std::vector<double> h, int seed):
          N_(N), J_(J), h_(N_), configuration_(N_), rng_(seed) {
+            if (h.size() != static_cast<std::size_t>(N_)) {
+                throw std::invalid_argument("External field size does not match number of spins");
+            }
             
             // initialize all spins at random
             std::mt19937 init_rng(std::random_device{}());

@@ -16,7 +16,8 @@ struct Config {
 	std::string hits_csv;
 	std::string out_dir;
 	double theta_max = std::acos(-1.0) / 6.0;  // 30 deg
-	double penalty = 10.0;
+	double merge_penalty = 10.0;
+	double fork_penalty = 10.0;
 };
 
 std::string require_value(int argc, char** argv, int& i) {
@@ -39,14 +40,17 @@ Config parse_args(int argc, char** argv) {
 			cfg.out_dir = require_value(argc, argv, i);
 		} else if (arg == "--theta-max") {
 			cfg.theta_max = std::stod(require_value(argc, argv, i));
-		} else if (arg == "--penalty") {
-			cfg.penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--merge-penalty") {
+			cfg.merge_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--fork-penalty") {
+			cfg.fork_penalty = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--help" || arg == "-h") {
 			std::cout
 				<< "Usage: run_interaction --hits-csv <path> --out-dir <path> [options]\n"
 				<< "Options:\n"
 				<< "  --theta-max <float>  Max angular threshold in radians (default: pi/6)\n"
-				<< "  --penalty <float>    Penalty for fork/merge conflicts (default: 10)\n";
+				<< "  --merge-penalty <float>  Penalty for merge conflicts (default: 10)\n"
+				<< "  --fork-penalty <float>   Penalty for fork conflicts (default: 10)\n";
 			std::exit(0);
 		} else {
 			throw std::runtime_error("Unknown argument: " + arg);
@@ -150,7 +154,8 @@ void write_meta_json(const std::filesystem::path& out_path,
 	out << "{\n"
 		<< "  \"hits_csv\": \"" << cfg.hits_csv << "\",\n"
 		<< "  \"theta_max\": " << cfg.theta_max << ",\n"
-		<< "  \"penalty\": " << cfg.penalty << ",\n"
+		<< "  \"merge_penalty\": " << cfg.merge_penalty << ",\n"
+		<< "  \"fork_penalty\": " << cfg.fork_penalty << ",\n"
 		<< "  \"n_hits\": " << n_hits << ",\n"
 		<< "  \"n_layers\": " << n_layers << ",\n"
 		<< "  \"n_segments\": " << n_segments << ",\n"
@@ -169,7 +174,7 @@ int main(int argc, char** argv) {
 		hit_vec_t hits = read_hits_from_csv(cfg.hits_csv);
 		hit_group_t grouped = group_hits_by_layer(hits);
 		seg_vec_t segments = create_segments(grouped);
-		interaction_mat_t J = interaction_matrix(segments, cfg.theta_max, cfg.penalty);
+		interaction_mat_t J = interaction_matrix(segments, cfg.theta_max, cfg.merge_penalty, cfg.fork_penalty);
 
 		int n_edges = 0;
 		for (int i = 0; i < static_cast<int>(J.size()); ++i) {
@@ -199,4 +204,3 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 }
-

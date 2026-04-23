@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -95,7 +96,7 @@ Config parse_args(int argc, char** argv) {
 	return cfg;
 }
 
-int read_num_segments(const std::filesystem::path& segments_csv) {
+std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segments_csv) {
 	if (!std::filesystem::exists(segments_csv)) {
 		throw std::runtime_error("Segments CSV does not exist: " + segments_csv.string());
 	}
@@ -109,6 +110,7 @@ int read_num_segments(const std::filesystem::path& segments_csv) {
 	std::getline(file, line);  // header
 
 	int max_seg_id = -1;
+	std::vector<std::pair<int, double>> parsed_segments;
 	while (std::getline(file, line)) {
 		if (line.empty()) {
 			continue;
@@ -116,10 +118,21 @@ int read_num_segments(const std::filesystem::path& segments_csv) {
 
 		std::stringstream line_stream(line);
 		std::string token;
-		if (!std::getline(line_stream, token, ',')) {
-			continue;
+		std::vector<std::string> tokens;
+		while (std::getline(line_stream, token, ',')) {
+			tokens.push_back(token);
 		}
-		const int seg_id = std::stoi(token);
+
+		if (tokens.size() < 7) {
+			throw std::runtime_error("Invalid line in segments CSV: " + line);
+		}
+
+		const int seg_id = std::stoi(tokens[0]);
+		const double dx = std::stod(tokens[5]);
+		const double dy = std::stod(tokens[6]);
+		const double length = std::sqrt(dx * dx + dy * dy);
+		parsed_segments.emplace_back(seg_id, length);
+
 		if (seg_id > max_seg_id) {
 			max_seg_id = seg_id;
 		}
@@ -129,7 +142,24 @@ int read_num_segments(const std::filesystem::path& segments_csv) {
 		throw std::runtime_error("No segments found in CSV: " + segments_csv.string());
 	}
 
-	return max_seg_id + 1;
+	std::vector<double> h(max_seg_id + 1, std::numeric_limits<double>::quiet_NaN());
+	for (const auto& [seg_id, length] : parsed_segments) {
+		if (seg_id < 0 || seg_id >= static_cast<int>(h.size())) {
+			throw std::runtime_error("Segment id out of range in segments CSV");
+		}
+		if (!std::isnan(h[seg_id])) {
+			throw std::runtime_error("Duplicate segment id in segments CSV: " + std::to_string(seg_id));
+		}
+		h[seg_id] = length;
+	}
+
+	for (int seg_id = 0; seg_id < static_cast<int>(h.size()); ++seg_id) {
+		if (std::isnan(h[seg_id])) {
+			throw std::runtime_error("Missing segment id in segments CSV: " + std::to_string(seg_id));
+		}
+	}
+
+	return h;
 }
 
 interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N) {
@@ -235,12 +265,12 @@ int main(int argc, char** argv) {
 		const Config cfg = parse_args(argc, argv);
 
 		std::cout << "--- Annealing Runner ---\n";
-		// Infer spin count from segments and then load couplings J from CSV.
-		const int N = read_num_segments(cfg.segments_csv);
+		// Infer spin count and local fields h_i from segment lengths.
+		std::vector<double> h = read_segment_lengths_csv(cfg.segments_csv);
+		const int N = static_cast<int>(h.size());
 		interaction_mat_t J = read_edges_csv(cfg.edges_csv, N);
-		std::vector<double> h(N, 0.0);
 
-		// Run annealing with zero external field by default.
+		// Run annealing using h_i = segment length.
 		std::vector<int> state = main_simulation(N,
 												 J,
 												 h,
