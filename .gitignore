@@ -194,9 +194,14 @@ uv.lock
 __pypackages__/
 
 # ------------------------------
+# Claude code
+# ------------------------------
+.claude
+
+# ------------------------------
 # Optional generated data
 # Uncomment if needed for your workflow
 # ------------------------------
-# data/
-# results/
-# figures/
+data/
+results/
+figures/
