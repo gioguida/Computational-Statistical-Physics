@@ -26,6 +26,6 @@ annealing:
   t_min: 0.05
   t_max: 5.0
   t_step: 0.05
+  toll: 0.001
   eq_sweeps: 50
-  meas_sweeps: 20
-  seed: 123
+  seed: 42

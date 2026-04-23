@@ -9,6 +9,6 @@
 
 std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double> h, 
     double T_min, double T_max, double T_step, double toll,
-    int N_sweeps_eq, int N_sweeps_meas, int seed);
+    int N_sweeps, int seed);
 
 #endif

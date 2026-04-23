@@ -18,8 +18,8 @@ struct Config {
 	double t_min = 0.05;
 	double t_max = 5.0;
 	double t_step = 0.05;
+	double toll = 1e-3;
 	int eq_sweeps = 50;
-	int meas_sweeps = 20;
 	int seed = 123;
 };
 
@@ -48,10 +48,10 @@ Config parse_args(int argc, char** argv) {
 			cfg.t_max = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--t-step") {
 			cfg.t_step = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--toll") {
+			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--eq-sweeps") {
 			cfg.eq_sweeps = std::stoi(require_value(argc, argv, i));
-		} else if (arg == "--meas-sweeps") {
-			cfg.meas_sweeps = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--seed") {
 			cfg.seed = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--help" || arg == "-h") {
@@ -61,8 +61,8 @@ Config parse_args(int argc, char** argv) {
 				<< "  --t-min <float>      Minimum temperature (default: 0.05)\n"
 				<< "  --t-max <float>      Maximum temperature (default: 5.0)\n"
 				<< "  --t-step <float>     Temperature step (default: 0.05)\n"
+				<< "  --toll <float>       Energy convergence tolerance (default: 1e-3)\n"
 				<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
-				<< "  --meas-sweeps <int>  Measurement sweeps per temperature (default: 20)\n"
 				<< "  --seed <int>         RNG seed (default: 123)\n";
 			std::exit(0);
 		} else {
@@ -85,8 +85,11 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.t_step <= 0.0) {
 		throw std::runtime_error("Invalid temperature step: require t_step > 0");
 	}
-	if (cfg.eq_sweeps <= 0 || cfg.meas_sweeps <= 0) {
-		throw std::runtime_error("Sweep counts must be positive");
+	if (cfg.toll <= 0.0) {
+		throw std::runtime_error("Invalid tolerance: require toll > 0");
+	}
+	if (cfg.eq_sweeps <= 0) {
+		throw std::runtime_error("Sweep count must be positive");
 	}
 
 	return cfg;
@@ -207,8 +210,8 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"t_min\": " << cfg.t_min << ",\n"
 		<< "  \"t_max\": " << cfg.t_max << ",\n"
 		<< "  \"t_step\": " << cfg.t_step << ",\n"
+		<< "  \"toll\": " << cfg.toll << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
-		<< "  \"meas_sweeps\": " << cfg.meas_sweeps << ",\n"
 		<< "  \"seed\": " << cfg.seed << "\n"
 		<< "}\n";
 }
@@ -244,8 +247,8 @@ int main(int argc, char** argv) {
 												 cfg.t_min,
 												 cfg.t_max,
 												 cfg.t_step,
+												 cfg.toll,
 												 cfg.eq_sweeps,
-												 cfg.meas_sweeps,
 												 cfg.seed);
 
 		const std::filesystem::path out_dir(cfg.out_dir);

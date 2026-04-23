@@ -7,7 +7,7 @@
 
 std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double> h, 
     double T_min, double T_max, double T_step, double toll,
-    int N_sweeps_eq, int N_sweeps_meas, int seed) {
+    int N_sweeps, int seed) {
     // set simulation parameters
     int N_temp = static_cast<int>((T_max - T_min)/T_step);
 
@@ -18,8 +18,7 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
 
     // Express smulation iterations in sweeps
     int sweep = N;
-    int N_eq = N_sweeps_eq * sweep;
-    int N_meas = N_sweeps_meas * sweep;
+    int N_eq = N_sweeps * sweep;
     int meas_int = sweep; 
 
     std::vector<double> spins(N);
