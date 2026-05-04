@@ -128,6 +128,8 @@ def run_annealing_stage(
             str(float(ann_cfg["t_step"])),
             "--toll",
             str(float(ann_cfg.get("toll", 1e-3))),
+            "--length-penalty",
+            str(float(ann_cfg.get("length_penalty", 0.0))),
             "--eq-sweeps",
             str(int(ann_cfg["eq_sweeps"])),
             "--log-every-steps",
