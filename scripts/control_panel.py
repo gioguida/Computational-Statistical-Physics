@@ -130,6 +130,8 @@ def run_annealing_stage(
             str(float(ann_cfg.get("toll", 1e-3))),
             "--eq-sweeps",
             str(int(ann_cfg["eq_sweeps"])),
+            "--log-every-steps",
+            str(int(ann_cfg.get("log_every_steps", 1))),
             "--seed",
             str(int(ann_cfg["seed"])),
         ],

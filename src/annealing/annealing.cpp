@@ -7,7 +7,7 @@
 
 std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double> h, 
     double T_min, double T_max, double T_step, double toll,
-    int N_sweeps, int seed) {
+    int N_sweeps, int seed, int log_every_steps) {
     // set simulation parameters
     int N_temp = static_cast<int>((T_max - T_min)/T_step);
 
@@ -45,8 +45,10 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
         double T = T_max - t*T_step;
         model.set_T(T);
 
-        std::cout << "\n--- Step " << t << " of " << N_temp <<" ---\n";
-        std::cout << " Temperature = " << T << std::endl;
+        if (t % log_every_steps == 0) {
+            std::cout << "\n--- Step " << t << " of " << N_temp <<" ---\n";
+            std::cout << " Temperature = " << T << std::endl;
+        }
 
 
         // equilibrate the model
@@ -57,10 +59,12 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
         energy_list.push_back(model.get_energy());
         if (t > N_energy)   energy_list.pop_front();
 
-        double temp = 0;
-        for (auto it = energy_list.begin(); it != energy_list.end(); ++it){
-            
-            temp = std::max(temp, std::abs(*it - *(std::next(it))));
+        double temp = toll + 1;
+        if (energy_list.size() >= 2) {
+            temp = 0;
+            for (auto it = energy_list.begin(); std::next(it) != energy_list.end(); ++it){
+                temp = std::max(temp, std::abs(*it - *(std::next(it))));
+            }
         }
         dev = temp;
 

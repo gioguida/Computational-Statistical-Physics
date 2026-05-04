@@ -26,14 +26,15 @@ generation:
     mean_fakes_per_layer: 0.0
 
 interaction:
-  theta_max: 0.5235987755982988
+  theta_max: 0.35
   merge_penalty: 10.0
   fork_penalty: 10.0
 
 annealing:
   t_min: 0.05
   t_max: 5.0
-  t_step: 0.05
-  toll: 0.001
-  eq_sweeps: 50
+  t_step: 0.1
+  toll: 0.000001
+  eq_sweeps: 100
+  log_every_steps: 10
   seed: 42

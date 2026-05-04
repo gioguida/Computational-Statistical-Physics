@@ -23,12 +23,11 @@ class Spinglass {
                 throw std::invalid_argument("External field size does not match number of spins");
             }
             
-            // initialize all spins at random
-            std::mt19937 init_rng(std::random_device{}());
+            // Initialize from the configured RNG so repeated runs with the same seed are reproducible.
             std::bernoulli_distribution bernoulli(0.5);
 
             for(int i = 0; i < N_; ++i)
-                configuration_[i] = 2*bernoulli(init_rng) - 1;
+                configuration_[i] = 2*bernoulli(rng_) - 1;
 
             h_ = h;
         };

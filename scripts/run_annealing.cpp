@@ -21,6 +21,7 @@ struct Config {
 	double t_step = 0.05;
 	double toll = 1e-3;
 	int eq_sweeps = 50;
+	int log_every_steps = 1;
 	int seed = 123;
 };
 
@@ -53,6 +54,8 @@ Config parse_args(int argc, char** argv) {
 			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--eq-sweeps") {
 			cfg.eq_sweeps = std::stoi(require_value(argc, argv, i));
+		} else if (arg == "--log-every-steps") {
+			cfg.log_every_steps = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--seed") {
 			cfg.seed = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--help" || arg == "-h") {
@@ -64,6 +67,7 @@ Config parse_args(int argc, char** argv) {
 				<< "  --t-step <float>     Temperature step (default: 0.05)\n"
 				<< "  --toll <float>       Energy convergence tolerance (default: 1e-3)\n"
 				<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
+				<< "  --log-every-steps <int>  Log every N annealing temperature steps (default: 1)\n"
 				<< "  --seed <int>         RNG seed (default: 123)\n";
 			std::exit(0);
 		} else {
@@ -92,11 +96,14 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.eq_sweeps <= 0) {
 		throw std::runtime_error("Sweep count must be positive");
 	}
+	if (cfg.log_every_steps <= 0) {
+		throw std::runtime_error("Log step interval must be positive");
+	}
 
 	return cfg;
 }
 
-std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segments_csv) {
+int read_segment_count_csv(const std::filesystem::path& segments_csv) {
 	if (!std::filesystem::exists(segments_csv)) {
 		throw std::runtime_error("Segments CSV does not exist: " + segments_csv.string());
 	}
@@ -110,7 +117,7 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 	std::getline(file, line);  // header
 
 	int max_seg_id = -1;
-	std::vector<std::pair<int, double>> parsed_segments;
+	std::vector<int> parsed_segments;
 	while (std::getline(file, line)) {
 		if (line.empty()) {
 			continue;
@@ -123,15 +130,12 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 			tokens.push_back(token);
 		}
 
-		if (tokens.size() < 7) {
+		if (tokens.empty()) {
 			throw std::runtime_error("Invalid line in segments CSV: " + line);
 		}
 
 		const int seg_id = std::stoi(tokens[0]);
-		const double dx = std::stod(tokens[5]);
-		const double dy = std::stod(tokens[6]);
-		const double length = std::sqrt(dx * dx + dy * dy);
-		parsed_segments.emplace_back(seg_id, length);
+		parsed_segments.push_back(seg_id);
 
 		if (seg_id > max_seg_id) {
 			max_seg_id = seg_id;
@@ -142,27 +146,27 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 		throw std::runtime_error("No segments found in CSV: " + segments_csv.string());
 	}
 
-	std::vector<double> h(max_seg_id + 1, std::numeric_limits<double>::quiet_NaN());
-	for (const auto& [seg_id, length] : parsed_segments) {
-		if (seg_id < 0 || seg_id >= static_cast<int>(h.size())) {
+	std::vector<bool> seen(max_seg_id + 1, false);
+	for (const int seg_id : parsed_segments) {
+		if (seg_id < 0 || seg_id >= static_cast<int>(seen.size())) {
 			throw std::runtime_error("Segment id out of range in segments CSV");
 		}
-		if (!std::isnan(h[seg_id])) {
+		if (seen[seg_id]) {
 			throw std::runtime_error("Duplicate segment id in segments CSV: " + std::to_string(seg_id));
 		}
-		h[seg_id] = length;
+		seen[seg_id] = true;
 	}
 
-	for (int seg_id = 0; seg_id < static_cast<int>(h.size()); ++seg_id) {
-		if (std::isnan(h[seg_id])) {
+	for (int seg_id = 0; seg_id < static_cast<int>(seen.size()); ++seg_id) {
+		if (!seen[seg_id]) {
 			throw std::runtime_error("Missing segment id in segments CSV: " + std::to_string(seg_id));
 		}
 	}
 
-	return h;
+	return max_seg_id + 1;
 }
 
-interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N) {
+interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N, std::vector<double>& h) {
 	if (!std::filesystem::exists(edges_csv)) {
 		throw std::runtime_error("Edges CSV does not exist: " + edges_csv.string());
 	}
@@ -195,7 +199,7 @@ interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N) 
 
 		const int i = std::stoi(tokens[0]);
 		const int j = std::stoi(tokens[1]);
-		const double Jij = std::stod(tokens[2]);
+		const double qij = std::stod(tokens[2]);
 
 		if (i < 0 || j < 0 || i >= N || j >= N) {
 			throw std::runtime_error("Edge index out of range in edges CSV: " + line);
@@ -204,8 +208,15 @@ interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N) 
 			continue;
 		}
 
+		// The interaction stage writes binary coefficients q_ij for
+		// E_binary = -sum q_ij x_i x_j, where x_i=(s_i+1)/2.
+		// Expanding into H = -sum J_ij s_i s_j - sum h_i s_i gives
+		// J_ij=q_ij/4 and a q_ij/4 field contribution to both endpoints.
+		const double Jij = qij / 4.0;
 		J[i].push_back(std::make_pair(j, Jij));
 		J[j].push_back(std::make_pair(i, Jij));
+		h[i] += Jij;
+		h[j] += Jij;
 	}
 
 	return J;
@@ -242,6 +253,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"t_step\": " << cfg.t_step << ",\n"
 		<< "  \"toll\": " << cfg.toll << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
+		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
 		<< "  \"seed\": " << cfg.seed << "\n"
 		<< "}\n";
 }
@@ -265,12 +277,12 @@ int main(int argc, char** argv) {
 		const Config cfg = parse_args(argc, argv);
 
 		std::cout << "--- Annealing Runner ---\n";
-		// Infer spin count and local fields h_i from segment lengths.
-		std::vector<double> h = read_segment_lengths_csv(cfg.segments_csv);
-		const int N = static_cast<int>(h.size());
-		interaction_mat_t J = read_edges_csv(cfg.edges_csv, N);
+		// Infer spin count and binary-objective local fields from interaction coefficients.
+		const int N = read_segment_count_csv(cfg.segments_csv);
+		std::vector<double> h(N, 0.0);
+		interaction_mat_t J = read_edges_csv(cfg.edges_csv, N, h);
 
-		// Run annealing using h_i = segment length.
+		// Run annealing on the Ising expansion of the binary segment-selection objective.
 		std::vector<int> state = main_simulation(N,
 												 J,
 												 h,
@@ -279,7 +291,8 @@ int main(int argc, char** argv) {
 												 cfg.t_step,
 												 cfg.toll,
 												 cfg.eq_sweeps,
-												 cfg.seed);
+												 cfg.seed,
+												 cfg.log_every_steps);
 
 		const std::filesystem::path out_dir(cfg.out_dir);
 		std::filesystem::create_directories(out_dir);

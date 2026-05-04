@@ -108,10 +108,9 @@ To reuse the hits/segments from a previous run and only re-run annealing, set `r
 
 ```bash
 # Install uv if not already installed
-pip install uv
 
 # Install dependencies and run
-uv run python scripts/control_panel.py
+uv run scripts/control_panel.py
 ```
 
 That's it. `uv` reads `pyproject.toml`, creates a `.venv` if needed, and launches the full pipeline.
