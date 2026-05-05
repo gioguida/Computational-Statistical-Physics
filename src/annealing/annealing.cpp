@@ -17,11 +17,8 @@ int count_selected_spins(const std::vector<int>& state) {
 }
 
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
-    double T_min, double T_max, double T_step, double toll,
+    double T_min, double T_max, int N_steps, double toll,
     int N_sweeps, int seed, int log_every_steps) {
-    // set simulation parameters
-    int N_temp = static_cast<int>((T_max - T_min)/T_step);
-
     std::filesystem::create_directory("../../results");
     
     std::cout << "--- Starting simulation ---" << std::endl;
@@ -46,6 +43,8 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
     }
 
     AnnealingResult result;
+    result.best_state = model.state();
+    result.best_energy = model.get_energy();
     result.trace.push_back({
         -1,
         T_max,
@@ -59,14 +58,15 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
     int t = 0;
     double dev = toll + 1;
 
-    while(t < N_temp && toll < dev ) {
+    while(t < N_steps && toll < dev ) {
 
-        double T = (std::cos(t * M_PI / N_temp) + 1) * 0.5 * (T_max - T_min) + T_min;
+        double exponent = std::log(N_steps - t) / std::log(N_steps);
+        double T = T_min * std::pow(T_max / T_min, exponent);
     
         model.set_T(T);
 
         if (t % log_every_steps == 0) {
-            std::cout << "\n--- Step " << t << " of " << N_temp <<" ---\n";
+            std::cout << "\n--- Step " << t << " of " << N_steps <<" ---\n";
             std::cout << " Temperature = " << T << std::endl;
         }
 
@@ -77,10 +77,15 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
         }
 
         const std::vector<int> current_state = model.state();
+        const double current_energy = model.get_energy();
+        if (current_energy < result.best_energy) {
+            result.best_energy = current_energy;
+            result.best_state = current_state;
+        }
         result.trace.push_back({
             t,
             T,
-            model.get_energy(),
+            current_energy,
             count_selected_spins(current_state)
         });
         

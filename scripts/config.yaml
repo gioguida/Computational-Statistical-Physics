@@ -33,9 +33,9 @@ interaction:
   layer_radius_penalty: 5.0
 
 annealing:
-  t_min: 0.1
-  t_max: 5.0
-  t_step: 0.01
+  t_min: 0.001
+  t_max: 2.0
+  n_steps: 500
   toll: 0.000001
   length_penalty: 0.5
   eq_sweeps: 100

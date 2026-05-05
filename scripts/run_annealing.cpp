@@ -18,7 +18,7 @@ struct Config {
 	std::string out_dir;
 	double t_min = 0.05;
 	double t_max = 5.0;
-	double t_step = 0.05;
+	int n_steps = 1000;
 	double toll = 1e-3;
 	double length_penalty = 0.0;
 	double layer_radius_penalty = 0.0;
@@ -51,8 +51,8 @@ Config parse_args(int argc, char** argv) {
 			cfg.t_min = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--t-max") {
 			cfg.t_max = std::stod(require_value(argc, argv, i));
-		} else if (arg == "--t-step") {
-			cfg.t_step = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--n-steps") {
+			cfg.n_steps = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--toll") {
 			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--length-penalty") {
@@ -99,8 +99,8 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.t_max <= cfg.t_min) {
 		throw std::runtime_error("Invalid temperature range: require t_max > t_min");
 	}
-	if (cfg.t_step <= 0.0) {
-		throw std::runtime_error("Invalid temperature step: require t_step > 0");
+	if (cfg.n_steps <= 0.0) {
+		throw std::runtime_error("Invalid temperature step: require n_stes > 0");
 	}
 	if (cfg.toll <= 0.0) {
 		throw std::runtime_error("Invalid tolerance: require toll > 0");
@@ -268,6 +268,18 @@ void write_final_state_csv(const std::filesystem::path& out_path, const std::vec
 	}
 }
 
+void write_lowest_energy_state_csv(const std::filesystem::path& out_path, const std::vector<int>& state) {
+	std::ofstream out(out_path);
+	if (!out.is_open()) {
+		throw std::runtime_error("Could not open output file: " + out_path.string());
+	}
+
+	out << "seg_id,spin,selected\n";
+	for (int i = 0; i < static_cast<int>(state.size()); ++i) {
+		out << i << ',' << state[i] << ',' << (state[i] > 0 ? 1 : 0) << '\n';
+	}
+}
+
 void write_energy_trace_csv(const std::filesystem::path& out_path,
 							const std::vector<AnnealingTraceSample>& trace) {
 	std::ofstream out(out_path);
@@ -288,7 +300,8 @@ void write_meta_json(const std::filesystem::path& out_path,
 					 const Config& cfg,
 					 int N,
 					 int n_edges_undirected,
-					 int n_trace_samples) {
+					 int n_trace_samples,
+					 double best_energy) {
 	std::ofstream out(out_path);
 	if (!out.is_open()) {
 		throw std::runtime_error("Could not open output file: " + out_path.string());
@@ -301,7 +314,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"n_edges_undirected\": " << n_edges_undirected << ",\n"
 		<< "  \"t_min\": " << cfg.t_min << ",\n"
 		<< "  \"t_max\": " << cfg.t_max << ",\n"
-		<< "  \"t_step\": " << cfg.t_step << ",\n"
+		<< "  \"n_steps\": " << cfg.n_steps << ",\n"
 		<< "  \"toll\": " << cfg.toll << ",\n"
 		<< "  \"length_penalty\": " << cfg.length_penalty << ",\n"
 		<< "  \"layer_radius_penalty\": " << cfg.layer_radius_penalty << ",\n"
@@ -309,6 +322,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
 		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
 		<< "  \"seed\": " << cfg.seed << ",\n"
+		<< "  \"best_energy\": " << best_energy << ",\n"
 		<< "  \"n_trace_samples\": " << n_trace_samples << "\n"
 		<< "}\n";
 }
@@ -357,7 +371,7 @@ int main(int argc, char** argv) {
 												 h,
 												 cfg.t_min,
 												 cfg.t_max,
-												 cfg.t_step,
+												 cfg.n_steps,
 												 cfg.toll,
 												 cfg.eq_sweeps,
 												 cfg.seed,
@@ -368,13 +382,15 @@ int main(int argc, char** argv) {
 
 		// Persist final spin assignment and run metadata for downstream analysis.
 		write_final_state_csv(out_dir / "final_state.csv", result.state);
+		write_lowest_energy_state_csv(out_dir / "lowest_energy_state.csv", result.best_state);
 		write_energy_trace_csv(out_dir / "energy_trace.csv", result.trace);
 		write_meta_json(
 			out_dir / "annealing_meta.json",
 			cfg,
 			N,
 			count_undirected_edges(J),
-			static_cast<int>(result.trace.size())
+			static_cast<int>(result.trace.size()),
+			result.best_energy
 		);
 
 		std::cout << "Saved annealing artifacts to: " << out_dir << "\n";

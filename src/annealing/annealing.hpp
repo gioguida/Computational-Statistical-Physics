@@ -17,11 +17,13 @@ struct AnnealingTraceSample {
 
 struct AnnealingResult {
     std::vector<int> state;
+    std::vector<int> best_state;
+    double best_energy = 0.0;
     std::vector<AnnealingTraceSample> trace;
 };
 
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
-    double T_min, double T_max, double T_step, double toll,
+    double T_min, double T_max, int N_steps, double toll,
     int N_sweeps, int seed, int log_every_steps);
 
 #endif
