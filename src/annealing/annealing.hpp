@@ -15,15 +15,23 @@ struct AnnealingTraceSample {
     int n_selected;
 };
 
+struct AnnealingStateCheckpoint {
+    int step;
+    double temperature;
+    double energy;
+    std::vector<int> state;
+};
+
 struct AnnealingResult {
     std::vector<int> state;
     std::vector<int> best_state;
     double best_energy = 0.0;
     std::vector<AnnealingTraceSample> trace;
+    std::vector<AnnealingStateCheckpoint> checkpoints;
 };
 
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
-    int N_sweeps, int seed, int log_every_steps);
+    int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps);
 
 #endif

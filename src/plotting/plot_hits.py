@@ -55,6 +55,9 @@ def plot_hits(
     """
     train = pd.read_csv(training_csv)
     truth = pd.read_csv(ground_truth_csv)
+    real_hit_ids = set(truth["hit_id"].tolist())
+    fake_train = train.loc[~train["hit_id"].isin(real_hit_ids)].copy()
+    real_train = train.loc[train["hit_id"].isin(real_hit_ids)].copy()
 
     rmax = max(detector_radii) * 1.15
 
@@ -73,15 +76,26 @@ def plot_hits(
         _detector_circles(ax, detector_radii, color="#555555")
 
     # ── left panel: training hits, colour = layer ───────────────────────────
-    n_layers = train["layer_id"].nunique()
+    n_layers = real_train["layer_id"].nunique() if not real_train.empty else train["layer_id"].nunique()
     layer_norm = plt.Normalize(vmin=0, vmax=n_layers - 1)
-    colours_layer = _LAYER_CMAP(layer_norm(train["layer_id"].values))
+    colours_layer = _LAYER_CMAP(layer_norm(real_train["layer_id"].values))
 
-    ax_train.scatter(
-        train["hit_x"], train["hit_y"],
-        c=colours_layer, s=18, edgecolors="white", linewidths=0.3, zorder=3,
+    if not real_train.empty:
+        ax_train.scatter(
+            real_train["hit_x"], real_train["hit_y"],
+            c=colours_layer, s=18, edgecolors="white", linewidths=0.3, zorder=3,
+        )
+    if not fake_train.empty:
+        ax_train.scatter(
+            fake_train["hit_x"], fake_train["hit_y"],
+            marker="x", s=34, color="#ff4d6d", linewidths=1.3, zorder=4,
+        )
+    ax_train.set_title(
+        f"Training hits  (colour = layer, fake x = {len(fake_train)})",
+        color="white",
+        fontsize=11,
+        pad=10,
     )
-    ax_train.set_title("Training hits  (colour = layer)", color="white", fontsize=11, pad=10)
 
     sm_layer = plt.cm.ScalarMappable(cmap=_LAYER_CMAP, norm=layer_norm)
     sm_layer.set_array([])
@@ -90,21 +104,34 @@ def plot_hits(
     cbar.ax.tick_params(colors="white", labelsize=7)
 
     # ── right panel: ground truth hits, colour = track_id ───────────────────
-    n_tracks = truth["track_id"].nunique()
+    truth_real = truth.loc[truth["track_id"] >= 0].copy()
+    truth_fake = truth.loc[truth["track_id"] < 0].copy()
+    n_tracks = truth_real["track_id"].nunique()
     track_norm = plt.Normalize(vmin=0, vmax=n_tracks - 1)
-    colours_track = _TRACK_CMAP(track_norm(truth["track_id"].values))
-
-    ax_truth.scatter(
-        truth["hit_x"], truth["hit_y"],
-        c=colours_track, s=18, edgecolors="white", linewidths=0.3, zorder=3,
+    if not truth_real.empty:
+        colours_track = _TRACK_CMAP(track_norm(truth_real["track_id"].values))
+        ax_truth.scatter(
+            truth_real["hit_x"], truth_real["hit_y"],
+            c=colours_track, s=18, edgecolors="white", linewidths=0.3, zorder=3,
+        )
+    if not truth_fake.empty:
+        ax_truth.scatter(
+            truth_fake["hit_x"], truth_fake["hit_y"],
+            marker="x", s=34, color="#ff4d6d", linewidths=1.3, zorder=4,
+        )
+    ax_truth.set_title(
+        f"Ground truth  (colour = track, fake x = {len(truth_fake)})",
+        color="white",
+        fontsize=11,
+        pad=10,
     )
-    ax_truth.set_title("Ground truth  (colour = track)", color="white", fontsize=11, pad=10)
 
-    sm_track = plt.cm.ScalarMappable(cmap=_TRACK_CMAP, norm=track_norm)
-    sm_track.set_array([])
-    cbar2 = fig.colorbar(sm_track, ax=ax_truth, fraction=0.046, pad=0.04, shrink=0.85)
-    cbar2.set_label("Track ID", color="white", fontsize=9)
-    cbar2.ax.tick_params(colors="white", labelsize=7)
+    if n_tracks > 0:
+        sm_track = plt.cm.ScalarMappable(cmap=_TRACK_CMAP, norm=track_norm)
+        sm_track.set_array([])
+        cbar2 = fig.colorbar(sm_track, ax=ax_truth, fraction=0.046, pad=0.04, shrink=0.85)
+        cbar2.set_label("Track ID", color="white", fontsize=9)
+        cbar2.ax.tick_params(colors="white", labelsize=7)
 
     fig.suptitle(
         "Particle Detector — Hit Map",

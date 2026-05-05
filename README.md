@@ -150,9 +150,9 @@ Each run creates a timestamped subfolder under `results/runs/`, containing:
 | `energy_trace.csv` | Hamiltonian trace recorded during annealing (`step,temperature,energy,n_selected`) |
 | `annealing_meta.json` | Parameters and convergence info for the annealing stage |
 
-To plot the Hamiltonian trace for a run, use:
+To generate plots for a run (including the Hamiltonian trace), use:
 
 ```bash
-python scripts/plot_hamiltonian.py              # latest run
-python scripts/plot_hamiltonian.py <run_id>     # specific run
+python scripts/run_plots.py
+python scripts/run_plots.py <run_id>
 ```

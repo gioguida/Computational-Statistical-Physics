@@ -107,6 +107,7 @@ def run_interaction_stage(
 def run_annealing_stage(
     project_root: Path,
     binary: Path,
+    hits_csv: Path,
     interaction_dir: Path,
     out_dir: Path,
     ann_cfg: dict[str, Any],
@@ -119,6 +120,8 @@ def run_annealing_stage(
     run_cmd(
         [
             str(binary),
+            "--hits-csv",
+            str(hits_csv),
             "--segments-csv",
             str(segments_csv),
             "--edges-csv",
@@ -137,12 +140,16 @@ def run_annealing_stage(
             str(float(ann_cfg.get("length_penalty", 0.0))),
             "--layer-radius-penalty",
             str(float(layer_radius_penalty)),
+            "--layer01-radial-tolerance",
+            str(float(ann_cfg.get("layer01_radial_tolerance", 0.0))),
             "--first-gap",
             str(float(first_gap)),
             "--eq-sweeps",
             str(int(ann_cfg["eq_sweeps"])),
             "--log-every-steps",
             str(int(ann_cfg.get("log_every_steps", 1))),
+            "--checkpoint-every-steps",
+            str(int(ann_cfg.get("checkpoint_every_steps", 10))),
             "--seed",
             str(int(ann_cfg["seed"])),
         ],
@@ -222,6 +229,7 @@ def main() -> int:
         run_annealing_stage(
             project_root,
             annealing_bin,
+            hits_csv,
             interaction_dir,
             annealing_dir,
             ann_cfg,

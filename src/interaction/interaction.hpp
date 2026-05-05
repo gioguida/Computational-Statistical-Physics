@@ -25,6 +25,7 @@ struct Segment {
     double angle;
 
     Segment(Hit, int, Hit, int, int);
+    Segment(int, int, int, int, int, double, double);
 };
 
 using hit_vec_t = std::vector<Hit>;

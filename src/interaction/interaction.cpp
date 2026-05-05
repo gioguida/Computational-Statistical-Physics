@@ -27,6 +27,15 @@ Segment::Segment(Hit a, int a_id, Hit b, int b_id, int seg_idx)
 }
 
 
+Segment::Segment(int _id, int _hit_a, int _hit_b, int _layer_a, int _layer_b, 
+    double _dx, double _dy):
+    id(_id), hit_a(_hit_a), hit_b(_hit_b), layer_a(_layer_a), layer_b(_layer_b),
+    dx(_dx), dy(_dy), angle(_angle) {
+
+    angle = std::atan2(dy,dx);
+} 
+
+
 double dot(Segment s_i, Segment s_j) {
     double prod_x = s_i.dx * s_j.dx; 
     double prod_y = s_i.dy * s_j.dy;

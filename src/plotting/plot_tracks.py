@@ -49,8 +49,10 @@ def _draw_ground_truth(
     detector_radii: Sequence[float],
 ) -> None:
     """Connect hits belonging to the same track across layers."""
-    n_tracks = truth["track_id"].nunique()
-    track_ids = sorted(truth["track_id"].unique())
+    truth_real = truth[truth["track_id"] >= 0]
+    truth_fake = truth[truth["track_id"] < 0]
+    n_tracks = truth_real["track_id"].nunique()
+    track_ids = sorted(truth_real["track_id"].unique())
     norm = plt.Normalize(vmin=0, vmax=max(n_tracks - 1, 1))
 
     _detector_circles(ax, detector_radii, color="#555555")
@@ -62,6 +64,17 @@ def _draw_ground_truth(
         ax.scatter(t["hit_x"], t["hit_y"], color=c, s=16, edgecolors="white",
                    linewidths=0.3, zorder=3)
 
+    if not truth_fake.empty:
+        ax.scatter(
+            truth_fake["hit_x"],
+            truth_fake["hit_y"],
+            marker="x",
+            s=34,
+            color="#ff4d6d",
+            linewidths=1.3,
+            zorder=4,
+        )
+
 
 # ── reconstruction drawing ──────────────────────────────────────────────────
 
@@ -70,6 +83,7 @@ def _draw_reconstructed(
     segments: pd.DataFrame,
     final_state: pd.DataFrame,
     hits: pd.DataFrame,
+    truth: pd.DataFrame,
     detector_radii: Sequence[float],
 ) -> int:
     """
@@ -81,8 +95,22 @@ def _draw_reconstructed(
 
     # Build a lookup: hit_id → (x, y)
     hit_pos = hits.set_index("hit_id")[["hit_x", "hit_y"]]
+    real_hit_ids = set(truth["hit_id"].tolist())
+    fake_hits = hits.loc[~hits["hit_id"].isin(real_hit_ids)].copy()
 
     _detector_circles(ax, detector_radii, color="#555555")
+
+    if not fake_hits.empty:
+        ax.scatter(
+            fake_hits["hit_x"],
+            fake_hits["hit_y"],
+            marker="x",
+            s=34,
+            color="#ff4d6d",
+            linewidths=1.3,
+            alpha=0.9,
+            zorder=1,
+        )
 
     # ── chain selected segments into tracks ──────────────────────────────
     # A chain is a maximal sequence of segments where one's hit_b == next's hit_a
@@ -190,10 +218,11 @@ def plot_tracks(
     )
 
     # ── right: reconstruction ───────────────────────────────────────────────
-    n_reco = _draw_reconstructed(ax_reco, segs, state, hits, detector_radii)
+    n_reco = _draw_reconstructed(ax_reco, segs, state, hits, truth, detector_radii)
     n_sel = int((state["selected"] == 1).sum())
+    n_fake = int((~hits["hit_id"].isin(set(truth["hit_id"].tolist()))).sum())
     ax_reco.set_title(
-        f"Reconstructed  ({n_reco} chains, {n_sel} segments)",
+        f"Reconstructed  ({n_reco} chains, {n_sel} segments, fake x = {n_fake})",
         color="white", fontsize=11, pad=10,
     )
 

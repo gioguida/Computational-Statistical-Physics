@@ -18,7 +18,7 @@ int count_selected_spins(const std::vector<int>& state) {
 
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
-    int N_sweeps, int seed, int log_every_steps) {
+    int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps) {
     std::filesystem::create_directory("../../results");
     
     std::cout << "--- Starting simulation ---" << std::endl;
@@ -50,6 +50,12 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
         T_max,
         model.get_energy(),
         count_selected_spins(model.state())
+    });
+    result.checkpoints.push_back({
+        -1,
+        T_max,
+        model.get_energy(),
+        model.state()
     });
 
     std::cout << "--- Beginning Simulation ---" << std::endl;
@@ -88,6 +94,14 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
             current_energy,
             count_selected_spins(current_state)
         });
+        if (t % checkpoint_every_steps == 0) {
+            result.checkpoints.push_back({
+                t,
+                T,
+                current_energy,
+                current_state
+            });
+        }
         
         energy_list.push_back(model.get_energy());
         if (t > N_energy)   energy_list.pop_front();
@@ -114,5 +128,14 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
     std::cout << "Execution time: " << mins << ":" << (secs < 10 ? "0" : "") << secs << std::endl;
 
     result.state = model.state();
+    const AnnealingTraceSample& last_sample = result.trace.back();
+    if (result.checkpoints.empty() || result.checkpoints.back().step != last_sample.step) {
+        result.checkpoints.push_back({
+            last_sample.step,
+            last_sample.temperature,
+            last_sample.energy,
+            result.state
+        });
+    }
     return result;
 }
