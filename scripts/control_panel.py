@@ -110,6 +110,8 @@ def run_annealing_stage(
     interaction_dir: Path,
     out_dir: Path,
     ann_cfg: dict[str, Any],
+    first_gap: float,
+    layer_radius_penalty: float,
 ) -> None:
     segments_csv = interaction_dir / "segments.csv"
     edges_csv = interaction_dir / "J_edges.csv"
@@ -133,6 +135,10 @@ def run_annealing_stage(
             str(float(ann_cfg.get("toll", 1e-3))),
             "--length-penalty",
             str(float(ann_cfg.get("length_penalty", 0.0))),
+            "--layer-radius-penalty",
+            str(float(layer_radius_penalty)),
+            "--first-gap",
+            str(float(first_gap)),
             "--eq-sweeps",
             str(int(ann_cfg["eq_sweeps"])),
             "--log-every-steps",
@@ -161,6 +167,12 @@ def main() -> int:
     gen_cfg = cfg.get("generation", {})
     inter_cfg = cfg.get("interaction", {})
     ann_cfg = cfg.get("annealing", {})
+    gen_data_cfg = gen_cfg.get("data", {}) if isinstance(gen_cfg, dict) else {}
+    detector_layers = gen_data_cfg.get("detector_layers", [1.0, 2.0])
+    if not isinstance(detector_layers, list) or len(detector_layers) < 2:
+        raise ValueError("generation.data.detector_layers must contain at least two radii")
+    first_gap = abs(float(detector_layers[1]) - float(detector_layers[0]))
+    layer_radius_penalty = float(ann_cfg.get("layer_radius_penalty", inter_cfg.get("layer_radius_penalty", 0.0)))
 
     build_dir = (project_root / str(build_cfg.get("build_dir", "build"))).resolve()
     results_root = (project_root / str(paths_cfg.get("results_root", "results/runs"))).resolve()
@@ -207,7 +219,15 @@ def main() -> int:
                 "Missing interaction artifacts. Enable switches.interaction or reuse an existing run.run_id."
             )
         annealing_dir.mkdir(parents=True, exist_ok=True)
-        run_annealing_stage(project_root, annealing_bin, interaction_dir, annealing_dir, ann_cfg)
+        run_annealing_stage(
+            project_root,
+            annealing_bin,
+            interaction_dir,
+            annealing_dir,
+            ann_cfg,
+            first_gap,
+            layer_radius_penalty,
+        )
 
     print(f"Run id: {run_id}")
     print(f"Run folder: {run_root}")

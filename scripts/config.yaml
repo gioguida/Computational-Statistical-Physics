@@ -18,7 +18,7 @@ generation:
   enabled: true
   module: src.hits.data_gen
   data:
-    n_particles: 20
+    n_particles: 20   # 20
     traj_radius_low: 4
     traj_radius_high: 20
     detector_layers: [1, 2, 3, 4, 5]
@@ -30,6 +30,7 @@ interaction:
   merge_penalty: 10.0
   fork_penalty: 10.0
   angle_penalty: 2.0
+  layer_radius_penalty: 5.0
 
 annealing:
   t_min: 0.05

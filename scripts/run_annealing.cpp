@@ -21,6 +21,8 @@ struct Config {
 	double t_step = 0.05;
 	double toll = 1e-3;
 	double length_penalty = 0.0;
+	double layer_radius_penalty = 0.0;
+	double first_gap = 0.0;
 	int eq_sweeps = 50;
 	int log_every_steps = 1;
 	int seed = 123;
@@ -55,6 +57,10 @@ Config parse_args(int argc, char** argv) {
 			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--length-penalty") {
 			cfg.length_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--layer-radius-penalty") {
+			cfg.layer_radius_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--first-gap") {
+			cfg.first_gap = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--eq-sweeps") {
 			cfg.eq_sweeps = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--log-every-steps") {
@@ -70,6 +76,8 @@ Config parse_args(int argc, char** argv) {
 				<< "  --t-step <float>     Temperature step (default: 0.05)\n"
 				<< "  --toll <float>       Energy convergence tolerance (default: 1e-3)\n"
 				<< "  --length-penalty <float>  Binary penalty per unit selected segment length (default: 0)\n"
+				<< "  --layer-radius-penalty <float>  Penalty for segments between first too layers for being too long (default: 0)\n"
+				<< "  --first-gap <float>  Radius gap between the first two detector layers (default: 0)\n"
 				<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
 				<< "  --log-every-steps <int>  Log every N annealing temperature steps (default: 1)\n"
 				<< "  --seed <int>         RNG seed (default: 123)\n";
@@ -100,6 +108,12 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.length_penalty < 0.0) {
 		throw std::runtime_error("Invalid length penalty: require length_penalty >= 0");
 	}
+	if (cfg.layer_radius_penalty < 0.0) {
+		throw std::runtime_error("Invalid layer radius penalty: require layer_radius_penalty >= 0");
+	}
+	if (cfg.first_gap < 0.0) {
+		throw std::runtime_error("Invalid first gap: require first_gap >= 0");
+	}
 	if (cfg.eq_sweeps <= 0) {
 		throw std::runtime_error("Sweep count must be positive");
 	}
@@ -110,7 +124,13 @@ Config parse_args(int argc, char** argv) {
 	return cfg;
 }
 
-std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segments_csv) {
+struct SegmentInfo {
+	double length = 0.0;
+	int layer_a = -1;
+	int layer_b = -1;
+};
+
+std::vector<SegmentInfo> read_segment_info_csv(const std::filesystem::path& segments_csv) {
 	if (!std::filesystem::exists(segments_csv)) {
 		throw std::runtime_error("Segments CSV does not exist: " + segments_csv.string());
 	}
@@ -124,7 +144,7 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 	std::getline(file, line);  // header
 
 	int max_seg_id = -1;
-	std::vector<std::pair<int, double>> parsed_segments;
+	std::vector<std::pair<int, SegmentInfo>> parsed_segments;
 	while (std::getline(file, line)) {
 		if (line.empty()) {
 			continue;
@@ -142,10 +162,12 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 		}
 
 		const int seg_id = std::stoi(tokens[0]);
+		const int layer_a = std::stoi(tokens[3]);
+		const int layer_b = std::stoi(tokens[4]);
 		const double dx = std::stod(tokens[5]);
 		const double dy = std::stod(tokens[6]);
 		const double length = std::sqrt(dx * dx + dy * dy);
-		parsed_segments.emplace_back(seg_id, length);
+		parsed_segments.emplace_back(seg_id, SegmentInfo{length, layer_a, layer_b});
 
 		if (seg_id > max_seg_id) {
 			max_seg_id = seg_id;
@@ -156,24 +178,26 @@ std::vector<double> read_segment_lengths_csv(const std::filesystem::path& segmen
 		throw std::runtime_error("No segments found in CSV: " + segments_csv.string());
 	}
 
-	std::vector<double> lengths(max_seg_id + 1, std::numeric_limits<double>::quiet_NaN());
-	for (const auto& [seg_id, length] : parsed_segments) {
-		if (seg_id < 0 || seg_id >= static_cast<int>(lengths.size())) {
+	std::vector<SegmentInfo> segment_info(max_seg_id + 1);
+	std::vector<bool> seen(max_seg_id + 1, false);
+	for (const auto& [seg_id, info] : parsed_segments) {
+		if (seg_id < 0 || seg_id >= static_cast<int>(segment_info.size())) {
 			throw std::runtime_error("Segment id out of range in segments CSV");
 		}
-		if (!std::isnan(lengths[seg_id])) {
+		if (seen[seg_id]) {
 			throw std::runtime_error("Duplicate segment id in segments CSV: " + std::to_string(seg_id));
 		}
-		lengths[seg_id] = length;
+		segment_info[seg_id] = info;
+		seen[seg_id] = true;
 	}
 
-	for (int seg_id = 0; seg_id < static_cast<int>(lengths.size()); ++seg_id) {
-		if (std::isnan(lengths[seg_id])) {
+	for (int seg_id = 0; seg_id < static_cast<int>(segment_info.size()); ++seg_id) {
+		if (!seen[seg_id]) {
 			throw std::runtime_error("Missing segment id in segments CSV: " + std::to_string(seg_id));
 		}
 	}
 
-	return lengths;
+	return segment_info;
 }
 
 interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N, std::vector<double>& h) {
@@ -263,6 +287,8 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"t_step\": " << cfg.t_step << ",\n"
 		<< "  \"toll\": " << cfg.toll << ",\n"
 		<< "  \"length_penalty\": " << cfg.length_penalty << ",\n"
+		<< "  \"layer_radius_penalty\": " << cfg.layer_radius_penalty << ",\n"
+		<< "  \"first_gap\": " << cfg.first_gap << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
 		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
 		<< "  \"seed\": " << cfg.seed << "\n"
@@ -289,12 +315,22 @@ int main(int argc, char** argv) {
 
 		std::cout << "--- Annealing Runner ---\n";
 		// Infer spin count and binary-objective local fields from interaction coefficients.
-		const std::vector<double> segment_lengths = read_segment_lengths_csv(cfg.segments_csv);
-		const int N = static_cast<int>(segment_lengths.size());
+		const std::vector<SegmentInfo> segment_info = read_segment_info_csv(cfg.segments_csv);
+		const int N = static_cast<int>(segment_info.size());
 		std::vector<double> h(N, 0.0);
 		interaction_mat_t J = read_edges_csv(cfg.edges_csv, N, h);
 		for (int i = 0; i < N; ++i) {
-			h[i] -= 0.5 * cfg.length_penalty * segment_lengths[i];
+			h[i] -= 0.5 * cfg.length_penalty * segment_info[i].length;
+
+			const bool is_layer_0_to_1 = (segment_info[i].layer_a == 0 && segment_info[i].layer_b == 1);
+			if (is_layer_0_to_1 && cfg.first_gap > 0.0) {
+				const bool too_long = (segment_info[i].length - cfg.first_gap) > (0.2 * cfg.first_gap);
+				if (too_long) {
+					h[i] -= cfg.layer_radius_penalty * static_cast<int>(too_long);
+				} else {
+					h[i] += cfg.layer_radius_penalty * static_cast<int>(too_long);
+				}
+			}
 		}
 
 		// Run annealing on the Ising expansion of the binary segment-selection objective.
