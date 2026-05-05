@@ -15,16 +15,19 @@ Usage
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 # ── resolve project root (works when called from repo root or scripts/) ─────
 _SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = _SCRIPT_DIR.parent
+os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
 
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.plotting.plot_hits import plot_hits       # noqa: E402
+from src.plotting.plot_hamiltonian import plot_hamiltonian_trace  # noqa: E402
 from src.plotting.plot_tracks import plot_tracks   # noqa: E402
 
 try:
@@ -75,6 +78,7 @@ def main() -> int:
     ground_truth_csv = (PROJECT_ROOT / "data" / "ground_truth_hits.csv").resolve()
     segments_csv     = run_dir / "interaction" / "segments.csv"
     final_state_csv  = run_dir / "annealing"   / "final_state.csv"
+    energy_trace_csv = run_dir / "annealing"   / "energy_trace.csv"
 
     for p in (training_csv, ground_truth_csv, segments_csv, final_state_csv):
         if not p.exists():
@@ -108,6 +112,15 @@ def main() -> int:
         detector_radii=detector_radii,
         out_path=plot_dir / "tracks.png",
     )
+
+    if energy_trace_csv.exists():
+        print("Generating Hamiltonian trace plot ...")
+        plot_hamiltonian_trace(
+            trace_csv=energy_trace_csv,
+            out_path=plot_dir / "hamiltonian_trace.png",
+        )
+    else:
+        print("Skipping Hamiltonian trace plot: missing energy_trace.csv")
 
     print(f"\nAll plots saved to: {plot_dir}")
     return 0

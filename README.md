@@ -60,7 +60,7 @@ The pipeline runs in four sequential stages, all controlled from `scripts/config
 
 - Temperature is cooled from T_max = 5.0 down to T_min = 0.05 in steps of 0.05, with 50 equilibration sweeps per temperature.
 - Stops early if the energy converges (tolerance = 0.001).
-- Outputs `final_state.csv` and `annealing_meta.json`.
+- Outputs `final_state.csv`, `energy_trace.csv`, and `annealing_meta.json`.
 
 ### 4. Visualisation / Evaluation (planned)
 - Intended to compare reconstructed tracks against ground truth and visualise results.
@@ -147,4 +147,12 @@ Each run creates a timestamped subfolder under `results/runs/`, containing:
 | `J_edges.csv` | Sparse interaction matrix (upper triangle) |
 | `interaction_meta.json` | Parameters used for the interaction stage |
 | `final_state.csv` | Spin configuration after annealing (selected segments) |
+| `energy_trace.csv` | Hamiltonian trace recorded during annealing (`step,temperature,energy,n_selected`) |
 | `annealing_meta.json` | Parameters and convergence info for the annealing stage |
+
+To plot the Hamiltonian trace for a run, use:
+
+```bash
+python scripts/plot_hamiltonian.py              # latest run
+python scripts/plot_hamiltonian.py <run_id>     # specific run
+```

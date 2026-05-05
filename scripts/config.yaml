@@ -22,8 +22,8 @@ generation:
     traj_radius_low: 4
     traj_radius_high: 20
     detector_layers: [1, 2, 3, 4, 5]
-    sigma_res: 0.05 # 0.05
-    mean_fakes_per_layer: 2.0 # 2
+    sigma_res: 0.0 # 0.05
+    mean_fakes_per_layer: 0.0 # 2
 
 interaction:
   theta_max: 0.35
@@ -32,9 +32,9 @@ interaction:
   angle_penalty: 2.0
 
 annealing:
-  t_min: 0.05
+  t_min: 0.1
   t_max: 5.0
-  t_step: 0.1
+  t_step: 0.01
   toll: 0.000001
   length_penalty: 0.5
   eq_sweeps: 100

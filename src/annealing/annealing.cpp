@@ -3,9 +3,20 @@
 #include <algorithm>
 
 
+
 #define N_energy 5
 
-std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double> h, 
+namespace {
+
+int count_selected_spins(const std::vector<int>& state) {
+    return static_cast<int>(std::count_if(state.begin(), state.end(), [](int spin) {
+        return spin > 0;
+    }));
+}
+
+}
+
+AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, double T_step, double toll,
     int N_sweeps, int seed, int log_every_steps) {
     // set simulation parameters
@@ -34,6 +45,14 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
         model.step();
     }
 
+    AnnealingResult result;
+    result.trace.push_back({
+        -1,
+        T_max,
+        model.get_energy(),
+        count_selected_spins(model.state())
+    });
+
     std::cout << "--- Beginning Simulation ---" << std::endl;
 
     std::list<double> energy_list;
@@ -42,7 +61,8 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
 
     while(t < N_temp && toll < dev ) {
 
-        double T = T_max - t*T_step;
+        double T = (std::cos(t * M_PI / N_temp) + 1) * 0.5 * (T_max - T_min) + T_min;
+    
         model.set_T(T);
 
         if (t % log_every_steps == 0) {
@@ -55,6 +75,14 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
         for(int i = 0; i < N_eq; ++i) {
             model.step();
         }
+
+        const std::vector<int> current_state = model.state();
+        result.trace.push_back({
+            t,
+            T,
+            model.get_energy(),
+            count_selected_spins(current_state)
+        });
         
         energy_list.push_back(model.get_energy());
         if (t > N_energy)   energy_list.pop_front();
@@ -80,5 +108,6 @@ std::vector<int> main_simulation(int N, interaction_mat_t J, std::vector<double>
     int secs = total_secs % 60;
     std::cout << "Execution time: " << mins << ":" << (secs < 10 ? "0" : "") << secs << std::endl;
 
-    return model.state(); 
+    result.state = model.state();
+    return result;
 }
