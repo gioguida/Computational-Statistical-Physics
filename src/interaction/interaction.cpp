@@ -136,7 +136,13 @@ seg_vec_t create_segments(hit_group_t grouped) {
     return segments;
 }
 
-interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, double merge_penalty, double fork_penalty) {
+interaction_mat_t interaction_matrix(
+    seg_vec_t segments, 
+    double theta_max, 
+    double merge_penalty, 
+    double fork_penalty,
+    double angle_penalty
+    ) {
     int N_segments = segments.size();
     interaction_mat_t J(N_segments);
 
@@ -152,9 +158,9 @@ interaction_mat_t interaction_matrix(seg_vec_t segments, double theta_max, doubl
             ) {
                 double reward = seg_alignment(segments[i], segments[j]);
                 // check if the angle is below the threshold
-                reward = reward > std::cos(theta_max) ? reward : 0.0;
-                J[i].emplace_back(std::pair<int,double>{j, reward});
-                J[j].emplace_back(std::pair<int,double>{i, reward});
+                double score = reward > std::cos(theta_max) ? reward : -angle_penalty;
+                J[i].emplace_back(std::pair<int,double>{j, score});
+                J[j].emplace_back(std::pair<int,double>{i, score});
 
             } else if( // merged segments
                 (segments[i].layer_b == segments[j].layer_b) &&

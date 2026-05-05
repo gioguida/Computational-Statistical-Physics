@@ -82,6 +82,7 @@ def run_interaction_stage(
     theta_max = float(inter_cfg["theta_max"])
     merge_penalty = float(inter_cfg["merge_penalty"])
     fork_penalty = float(inter_cfg["fork_penalty"])
+    angle_penalty = float(inter_cfg["angle_penalty"])
 
     run_cmd(
         [
@@ -96,6 +97,8 @@ def run_interaction_stage(
             str(merge_penalty),
             "--fork-penalty",
             str(fork_penalty),
+            "--angle-penalty",
+            str(angle_penalty),
         ],
         cwd=project_root,
     )

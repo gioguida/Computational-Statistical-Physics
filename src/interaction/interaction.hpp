@@ -42,6 +42,6 @@ hit_group_t group_hits_by_layer(hit_vec_t);
 
 seg_vec_t create_segments(hit_group_t);
 
-interaction_mat_t interaction_matrix(seg_vec_t, double, double, double);
+interaction_mat_t interaction_matrix(seg_vec_t, double, double, double, double);
 
 #endif

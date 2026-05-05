@@ -114,6 +114,6 @@ def plot_hits(
 
     if out_path is not None:
         fig.savefig(out_path, dpi=dpi, facecolor=fig.get_facecolor(), bbox_inches="tight")
-        print(f"  ✓ saved  {out_path}")
+        print(f"  saved  {out_path}")
 
     return fig

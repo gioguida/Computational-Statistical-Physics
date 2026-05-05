@@ -57,6 +57,8 @@ def main() -> int:
     cfg = load_config(cfg_path)
     paths_cfg = cfg.get("paths", {})
     results_root = (PROJECT_ROOT / paths_cfg.get("results_root", "results/runs")).resolve()
+    run_id = str(cfg.get("run", {}).get("run_id", {}))
+    saved_run_dir = (results_root / run_id).resolve()
 
     # ── choose run ──────────────────────────────────────────────────────────
     if len(sys.argv) > 1:
@@ -84,7 +86,8 @@ def main() -> int:
     )
 
     # ── output directory ────────────────────────────────────────────────────
-    plot_dir = run_dir / "plots"
+    save_dir = saved_run_dir if run_id != "auto" else run_dir
+    plot_dir = (save_dir / "plots").resolve()
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     # ── generate plots ──────────────────────────────────────────────────────
