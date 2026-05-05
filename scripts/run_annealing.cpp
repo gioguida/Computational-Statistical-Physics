@@ -268,10 +268,27 @@ void write_final_state_csv(const std::filesystem::path& out_path, const std::vec
 	}
 }
 
+void write_energy_trace_csv(const std::filesystem::path& out_path,
+							const std::vector<AnnealingTraceSample>& trace) {
+	std::ofstream out(out_path);
+	if (!out.is_open()) {
+		throw std::runtime_error("Could not open output file: " + out_path.string());
+	}
+
+	out << "step,temperature,energy,n_selected\n";
+	for (const AnnealingTraceSample& sample : trace) {
+		out << sample.step << ','
+			<< sample.temperature << ','
+			<< sample.energy << ','
+			<< sample.n_selected << '\n';
+	}
+}
+
 void write_meta_json(const std::filesystem::path& out_path,
 					 const Config& cfg,
 					 int N,
-					 int n_edges_undirected) {
+					 int n_edges_undirected,
+					 int n_trace_samples) {
 	std::ofstream out(out_path);
 	if (!out.is_open()) {
 		throw std::runtime_error("Could not open output file: " + out_path.string());
@@ -291,7 +308,8 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"first_gap\": " << cfg.first_gap << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
 		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
-		<< "  \"seed\": " << cfg.seed << "\n"
+		<< "  \"seed\": " << cfg.seed << ",\n"
+		<< "  \"n_trace_samples\": " << n_trace_samples << "\n"
 		<< "}\n";
 }
 
@@ -334,7 +352,7 @@ int main(int argc, char** argv) {
 		}
 
 		// Run annealing on the Ising expansion of the binary segment-selection objective.
-		std::vector<int> state = main_simulation(N,
+		AnnealingResult result = main_simulation(N,
 												 J,
 												 h,
 												 cfg.t_min,
@@ -349,8 +367,15 @@ int main(int argc, char** argv) {
 		std::filesystem::create_directories(out_dir);
 
 		// Persist final spin assignment and run metadata for downstream analysis.
-		write_final_state_csv(out_dir / "final_state.csv", state);
-		write_meta_json(out_dir / "annealing_meta.json", cfg, N, count_undirected_edges(J));
+		write_final_state_csv(out_dir / "final_state.csv", result.state);
+		write_energy_trace_csv(out_dir / "energy_trace.csv", result.trace);
+		write_meta_json(
+			out_dir / "annealing_meta.json",
+			cfg,
+			N,
+			count_undirected_edges(J),
+			static_cast<int>(result.trace.size())
+		);
 
 		std::cout << "Saved annealing artifacts to: " << out_dir << "\n";
 		return 0;
