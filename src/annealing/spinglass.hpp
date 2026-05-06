@@ -6,6 +6,12 @@
 #include <random>
 #include <stdexcept>
 
+struct MetropolisStepStats {
+    int proposed = 0;
+    int accepted = 0;
+    double deltaE = 0.0;
+};
+
 class Spinglass {
     private:
         int const N_;
@@ -40,7 +46,7 @@ class Spinglass {
 
         void flip_site(int const& site);
         double deltaE(int const& site) const;
-        void step();
+        MetropolisStepStats step();
 
 };
 #endif

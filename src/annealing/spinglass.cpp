@@ -49,18 +49,23 @@ double Spinglass::deltaE(int const& site) const {
 };
 
 
-void Spinglass::step() {
+MetropolisStepStats Spinglass::step() {
+    MetropolisStepStats stats;
+    stats.proposed = 1;
+
     // randomly select new site
     std::uniform_int_distribution<> unif_int(0, N_-1);
     int site = unif_int(rng_);
 
     // compute the energy difference
     double dE = deltaE(site);
+    stats.deltaE = dE;
     // accept the move if energy decreases
     if(dE <= 0) {
         flip_site(site);
         // update energy
         E_ = E_ + dE;
+        stats.accepted = 1;
     } else { // play the Metropolis game
         // extract a random number
         std::uniform_real_distribution<> unif_real(0.0, 1.0);
@@ -69,6 +74,8 @@ void Spinglass::step() {
             flip_site(site);
             // update energy
             E_ = E_ + dE;
+            stats.accepted = 1;
         }
-    } 
+    }
+    return stats;
 };

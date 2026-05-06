@@ -15,6 +15,20 @@ struct AnnealingTraceSample {
     int n_selected;
 };
 
+struct AnnealingRecord {
+    int step;
+    double T;
+    double H_mean;
+    double H_var;
+    double C_v;
+    double acceptance_rate;
+    double H_min_so_far;
+    double n_active_mean;
+    double n_active_std;
+    double delta_E_mean_neg;
+    double delta_E_mean_pos;
+};
+
 struct AnnealingStateCheckpoint {
     int step;
     double temperature;
@@ -27,6 +41,7 @@ struct AnnealingResult {
     std::vector<int> best_state;
     double best_energy = 0.0;
     std::vector<AnnealingTraceSample> trace;
+    std::vector<AnnealingRecord> annealing_trace;
     std::vector<AnnealingStateCheckpoint> checkpoints;
 };
 

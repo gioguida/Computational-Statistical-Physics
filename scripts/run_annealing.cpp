@@ -378,6 +378,29 @@ void write_energy_trace_csv(const std::filesystem::path& out_path,
 	}
 }
 
+void write_annealing_trace_csv(const std::filesystem::path& out_path,
+							   const std::vector<AnnealingRecord>& trace) {
+	std::ofstream out(out_path);
+	if (!out.is_open()) {
+		throw std::runtime_error("Could not open output file: " + out_path.string());
+	}
+
+	out << "step,T,H_mean,H_var,C_v,acceptance_rate,H_min_so_far,n_active_mean,n_active_std,delta_E_mean_neg,delta_E_mean_pos\n";
+	for (const AnnealingRecord& record : trace) {
+		out << record.step << ','
+			<< record.T << ','
+			<< record.H_mean << ','
+			<< record.H_var << ','
+			<< record.C_v << ','
+			<< record.acceptance_rate << ','
+			<< record.H_min_so_far << ','
+			<< record.n_active_mean << ','
+			<< record.n_active_std << ','
+			<< record.delta_E_mean_neg << ','
+			<< record.delta_E_mean_pos << '\n';
+	}
+}
+
 void write_state_checkpoints_csv(const std::filesystem::path& out_path,
 								 const std::vector<AnnealingStateCheckpoint>& checkpoints,
 								 int N) {
@@ -413,6 +436,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 					 int N,
 					 int n_edges_undirected,
 					 int n_trace_samples,
+					 int n_annealing_trace_samples,
 					 int n_checkpoints,
 					 double best_energy) {
 	std::ofstream out(out_path);
@@ -439,6 +463,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"seed\": " << cfg.seed << ",\n"
 		<< "  \"best_energy\": " << best_energy << ",\n"
 		<< "  \"n_trace_samples\": " << n_trace_samples << ",\n"
+		<< "  \"n_annealing_trace_samples\": " << n_annealing_trace_samples << ",\n"
 		<< "  \"n_checkpoints\": " << n_checkpoints << "\n"
 		<< "}\n";
 }
@@ -510,6 +535,7 @@ int main(int argc, char** argv) {
 		write_final_state_csv(out_dir / "final_state.csv", result.state);
 		write_lowest_energy_state_csv(out_dir / "lowest_energy_state.csv", result.best_state);
 		write_energy_trace_csv(out_dir / "energy_trace.csv", result.trace);
+		write_annealing_trace_csv(out_dir / "annealing_trace.csv", result.annealing_trace);
 		write_state_checkpoints_csv(out_dir / "state_checkpoints.csv", result.checkpoints, N);
 		write_meta_json(
 			out_dir / "annealing_meta.json",
@@ -517,6 +543,7 @@ int main(int argc, char** argv) {
 			N,
 			count_undirected_edges(J),
 			static_cast<int>(result.trace.size()),
+			static_cast<int>(result.annealing_trace.size()),
 			static_cast<int>(result.checkpoints.size()),
 			result.best_energy
 		);
