@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -201,23 +202,29 @@ std::vector<Segment> read_segment_info_csv(const std::filesystem::path& segments
 		throw std::runtime_error("No segments found in CSV: " + segments_csv.string());
 	}
 
-	std::vector<Segment> segments(max_seg_id + 1);
+	std::vector<Segment> segments;
+	segments.reserve(max_seg_id + 1);
 	std::vector<bool> seen(max_seg_id + 1, false);
 	for (const auto& [seg_id, seg] : parsed_segments) {
-		if (seg_id < 0 || seg_id >= static_cast<int>(segments.size())) {
+		if (seg_id < 0 || seg_id > max_seg_id) {
 			throw std::runtime_error("Segment id out of range in segments CSV");
 		}
 		if (seen[seg_id]) {
 			throw std::runtime_error("Duplicate segment id in segments CSV: " + std::to_string(seg_id));
 		}
-		segments[seg_id] = seg;
 		seen[seg_id] = true;
 	}
 
-	for (int seg_id = 0; seg_id < static_cast<int>(segments.size()); ++seg_id) {
+	for (int seg_id = 0; seg_id <= max_seg_id; ++seg_id) {
 		if (!seen[seg_id]) {
 			throw std::runtime_error("Missing segment id in segments CSV: " + std::to_string(seg_id));
 		}
+	}
+
+	std::sort(parsed_segments.begin(), parsed_segments.end(),
+			  [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+	for (int seg_id = 0; seg_id <= max_seg_id; ++seg_id) {
+		segments.emplace_back(parsed_segments[seg_id].second);
 	}
 
 	return segments;

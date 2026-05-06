@@ -30,20 +30,20 @@ interaction:
   merge_penalty: 10.0
   fork_penalty: 10.0
   angle_penalty: 2.0
-  layer_radius_penalty: 6.0
+  layer_radius_penalty: 5.0
 
 annealing:
   t_min: 0.001
-  t_max: 3.0
-  n_steps: 500
+  t_max: 2.0
+  n_steps: 300
   checkpoint_every_steps: 10
   toll: 0.000001
   length_penalty: 0.5
-  layer01_radial_tolerance: 0.35
+  layer01_radial_tolerance: 0.23
   eq_sweeps: 100
   log_every_steps: 10
   seed: 42
 
 plotting:
-  create_annealing_animation: true
+  create_annealing_animation: false
   annealing_animation_fps: 8

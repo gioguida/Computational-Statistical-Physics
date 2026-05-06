@@ -16,6 +16,7 @@ add_executable(run_annealing
     scripts/run_annealing.cpp
     src/annealing/annealing.cpp
     src/annealing/spinglass.cpp
+    src/interaction/interaction.cpp
 )
 
 target_include_directories(run_annealing PRIVATE src)
