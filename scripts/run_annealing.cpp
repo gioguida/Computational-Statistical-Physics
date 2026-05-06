@@ -509,8 +509,16 @@ int main(int argc, char** argv) {
 
 					const double radial_angle = std::atan2(hit_it->second.second, hit_it->second.first);
 					const double segment_angle = std::atan2(segments[i].dy, segments[i].dx);
-					if (angular_distance(segment_angle, radial_angle) > cfg.layer01_radial_tolerance) {
-						h[i] -= cfg.layer_radius_penalty;
+					const double dev = angular_distance(segment_angle, radial_angle);
+					if (dev > cfg.layer01_radial_tolerance) {
+						// Soften the radial cliff: apply only a fraction of the
+						// penalty just above the tolerance, reaching full penalty
+						// at 2x the configured tolerance.
+						const double excess = std::min(
+							(dev - cfg.layer01_radial_tolerance) / cfg.layer01_radial_tolerance,
+							1.0
+						);
+						h[i] -= cfg.layer_radius_penalty * excess;
 					}
 				}
 			}

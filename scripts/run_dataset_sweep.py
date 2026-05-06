@@ -23,6 +23,27 @@ from src.hits.hits import Detector
 from src.plotting.metrics import visualize_metrics
 
 
+SEARCH_PARAM_KEYS = (
+    "theta_max",
+    "angle_penalty",
+    "layer_radius_penalty",
+    "length_penalty",
+    "layer01_radial_tolerance",
+    "anneal_t_max",
+)
+
+RANKING_COLUMNS = [
+    "search_score",
+    "track_efficiency",
+    "track_efficiency_soft",
+    "segment_precision",
+    "segment_recall",
+    "track_fake_rate",
+    "n_bifurcations",
+]
+RANKING_ASCENDING = [False, False, False, False, False, True, True]
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh)
@@ -34,8 +55,21 @@ def load_yaml(path: Path) -> dict[str, Any]:
 def generate_dataset(cfg: DataConfig, seed: int, out_dir: Path) -> tuple[Path, Path]:
     rng = np.random.default_rng(seed)
 
-    experiment = Detector(cfg.detector_layers, cfg.n_particles, cfg.traj_radius_low, cfg.traj_radius_high)
-    clean_hits = experiment.get_hits()
+    # Detector still uses the legacy global NumPy RNG, so pin it here to make
+    # the sweep reproducible dataset-by-dataset.
+    legacy_state = np.random.get_state()
+    try:
+        np.random.seed(seed)
+        experiment = Detector(
+            cfg.detector_layers,
+            cfg.n_particles,
+            cfg.traj_radius_low,
+            cfg.traj_radius_high,
+        )
+        clean_hits = experiment.get_hits()
+    finally:
+        np.random.set_state(legacy_state)
+
     n_real_hits = len(clean_hits)
 
     noisy_hits = clean_hits.copy()
@@ -81,6 +115,19 @@ def run_cmd(cmd: list[str], cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, check=True)
 
 
+def _compute_search_score(row: dict[str, Any]) -> float:
+    # Keep strict track efficiency dominant, but add softer terms so Optuna can
+    # distinguish between near-tied trials instead of seeing a mostly discrete objective.
+    return (
+        1000.0 * float(row.get("track_efficiency", 0.0))
+        + 50.0 * float(row.get("track_efficiency_soft", 0.0))
+        + 10.0 * float(row.get("segment_precision", 0.0))
+        + 5.0 * float(row.get("segment_recall", 0.0))
+        - 10.0 * float(row.get("track_fake_rate", 0.0))
+        - 5.0 * float(row.get("n_bifurcations", 0))
+    )
+
+
 def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
     project_root = Path(job["project_root"])
     build_dir = Path(job["build_dir"])
@@ -120,7 +167,7 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "--edges-csv", str(inter_dir / "J_edges.csv"),
             "--out-dir", str(ann_dir),
             "--t-min", str(ann["t_min"]),
-            "--t-max", str(ann["t_max"]),
+            "--t-max", str(p["anneal_t_max"]),
             "--n-steps", str(ann["n_steps"]),
             "--toll", str(ann["toll"]),
             "--length-penalty", str(p["length_penalty"]),
@@ -145,11 +192,15 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "merge_penalty": float(job["merge_penalty"]),
             "fork_penalty": float(job["fork_penalty"]),
             "angle_penalty": float(p["angle_penalty"]),
+            "create_plots": bool(job["create_plots"]),
+            "verbose": False,
         }
     )
 
     row = {
         "run_id": run_dir.name,
+        "merge_penalty": float(job["merge_penalty"]),
+        "fork_penalty": float(job["fork_penalty"]),
         **p,
         "segment_precision": float(metrics.get("precision", 0.0)),
         "segment_recall": float(metrics.get("TPR", 0.0)),
@@ -160,6 +211,7 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
     for key, value in metrics.items():
         if key not in row:
             row[key] = value
+    row["search_score"] = _compute_search_score(row)
     return row
 
 
@@ -169,6 +221,48 @@ def _bounds(values: list[float], name: str) -> tuple[float, float]:
     lo = min(values)
     hi = max(values)
     return (float(lo), float(hi))
+
+
+def _sort_trials(df: pd.DataFrame) -> pd.DataFrame:
+    return df.sort_values(RANKING_COLUMNS, ascending=RANKING_ASCENDING)
+
+
+def _clip_seed_trial(
+    seed_trial: dict[str, float],
+    bounds: dict[str, tuple[float, float]],
+) -> dict[str, float]:
+    clipped: dict[str, float] = {}
+    for key, value in seed_trial.items():
+        lo, hi = bounds[key]
+        clipped[key] = float(min(max(value, lo), hi))
+    return clipped
+
+
+def _native_value(value: Any) -> Any:
+    if pd.isna(value):
+        return None
+    if isinstance(value, (np.floating, float)):
+        return float(value)
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    return value
+
+
+def _row_to_native_dict(row: pd.Series) -> dict[str, Any]:
+    return {key: _native_value(value) for key, value in row.items()}
+
+
+def _series_stats(series: pd.Series) -> dict[str, float]:
+    clean = series.astype(float)
+    return {
+        "min": float(clean.min()),
+        "max": float(clean.max()),
+        "mean": float(clean.mean()),
+        "median": float(clean.median()),
+        "std": float(clean.std(ddof=0)),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -184,9 +278,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layer-radius-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
+    parser.add_argument("--anneal-t-max", nargs="+", type=float, required=True)
     parser.add_argument("--sampler-seed", type=int, default=42)
     parser.add_argument("--max-fake-rate", type=float, default=None)
     parser.add_argument("--max-bifurcations", type=int, default=None)
+    parser.add_argument("--log-every-steps", type=int, default=None)
+    parser.add_argument("--checkpoint-every-steps", type=int, default=None)
+    parser.add_argument("--create-plots", action="store_true")
+    parser.add_argument("--leaderboard-size", type=int, default=64)
     return parser.parse_args()
 
 
@@ -212,21 +311,34 @@ def main() -> int:
     merge_penalty = float(inter_cfg.get("merge_penalty", 10.0))
     fork_penalty = float(inter_cfg.get("fork_penalty", 10.0))
 
-    annealing_base = {
-        "t_min": float(ann_cfg.get("t_min", 1e-3)),
-        "t_max": float(ann_cfg.get("t_max", 2.0)),
-        "n_steps": int(ann_cfg.get("n_steps", 300)),
-        "toll": float(ann_cfg.get("toll", 1e-6)),
-        "eq_sweeps": int(ann_cfg.get("eq_sweeps", 100)),
-        "log_every_steps": int(ann_cfg.get("log_every_steps", 10)),
-        "checkpoint_every_steps": int(ann_cfg.get("checkpoint_every_steps", 10)),
-    }
-
     theta_lo, theta_hi = _bounds(args.theta_max, "theta_max")
     angle_lo, angle_hi = _bounds(args.angle_penalty, "angle_penalty")
     layer_radius_lo, layer_radius_hi = _bounds(args.layer_radius_penalty, "layer_radius_penalty")
     length_lo, length_hi = _bounds(args.length_penalty, "length_penalty")
     tol_lo, tol_hi = _bounds(args.layer01_radial_tolerance, "layer01_radial_tolerance")
+    anneal_tmax_lo, anneal_tmax_hi = _bounds(args.anneal_t_max, "anneal_t_max")
+
+    annealing_base = {
+        "t_min": float(ann_cfg.get("t_min", 1e-3)),
+        "n_steps": int(ann_cfg.get("n_steps", 300)),
+        "toll": float(ann_cfg.get("toll", 1e-6)),
+        "eq_sweeps": int(ann_cfg.get("eq_sweeps", 100)),
+        "log_every_steps": int(args.log_every_steps if args.log_every_steps is not None else ann_cfg.get("log_every_steps", 10)),
+        "checkpoint_every_steps": int(
+            args.checkpoint_every_steps
+            if args.checkpoint_every_steps is not None
+            else ann_cfg.get("checkpoint_every_steps", 10)
+        ),
+    }
+
+    search_bounds = {
+        "theta_max": (theta_lo, theta_hi),
+        "angle_penalty": (angle_lo, angle_hi),
+        "layer_radius_penalty": (layer_radius_lo, layer_radius_hi),
+        "length_penalty": (length_lo, length_hi),
+        "layer01_radial_tolerance": (tol_lo, tol_hi),
+        "anneal_t_max": (anneal_tmax_lo, anneal_tmax_hi),
+    }
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
@@ -238,8 +350,53 @@ def main() -> int:
     print(f"Sweep root: {sweep_root}")
     print(f"Datasets: {args.datasets}")
     print(f"Trials per dataset: {args.trials_per_dataset}")
+    print(f"Workers: {args.workers}")
+    print(f"Create plots: {bool(args.create_plots)}")
 
     all_rows: list[dict[str, Any]] = []
+
+    seed_trials = [
+        {
+            "theta_max": 0.33,
+            "angle_penalty": 6.0,
+            "layer_radius_penalty": 6.2,
+            "length_penalty": 0.52,
+            "layer01_radial_tolerance": 0.16,
+            "anneal_t_max": 4.0,
+        },
+        {
+            "theta_max": 0.35,
+            "angle_penalty": 5.5,
+            "layer_radius_penalty": 5.8,
+            "length_penalty": 0.42,
+            "layer01_radial_tolerance": 0.17,
+            "anneal_t_max": 5.0,
+        },
+        {
+            "theta_max": 0.31,
+            "angle_penalty": 7.0,
+            "layer_radius_penalty": 7.0,
+            "length_penalty": 0.45,
+            "layer01_radial_tolerance": 0.14,
+            "anneal_t_max": 5.0,
+        },
+        {
+            "theta_max": 0.32,
+            "angle_penalty": 6.5,
+            "layer_radius_penalty": 5.0,
+            "length_penalty": 0.38,
+            "layer01_radial_tolerance": 0.20,
+            "anneal_t_max": 6.0,
+        },
+        {
+            "theta_max": 0.37,
+            "angle_penalty": 5.0,
+            "layer_radius_penalty": 6.0,
+            "length_penalty": 0.30,
+            "layer01_radial_tolerance": 0.18,
+            "anneal_t_max": 6.5,
+        },
+    ]
 
     for d in range(args.datasets):
         dataset_id = f"ds_{d:03d}"
@@ -255,6 +412,7 @@ def main() -> int:
             layer_radius_penalty = trial.suggest_float("layer_radius_penalty", layer_radius_lo, layer_radius_hi)
             length_penalty = trial.suggest_float("length_penalty", length_lo, length_hi)
             layer01_radial_tolerance = trial.suggest_float("layer01_radial_tolerance", tol_lo, tol_hi)
+            anneal_t_max = trial.suggest_float("anneal_t_max", anneal_tmax_lo, anneal_tmax_hi)
 
             run_id = f"{dataset_id}_trial_{trial.number:04d}"
             run_dir = runs_root / run_id
@@ -272,21 +430,25 @@ def main() -> int:
                     "fork_penalty": fork_penalty,
                     "annealing_base": annealing_base,
                     "anneal_seed": int(ann_cfg.get("seed", 42)),
+                    "create_plots": bool(args.create_plots),
                     "params": {
                         "theta_max": theta_max,
                         "angle_penalty": angle_penalty,
                         "layer_radius_penalty": layer_radius_penalty,
                         "length_penalty": length_penalty,
                         "layer01_radial_tolerance": layer01_radial_tolerance,
+                        "anneal_t_max": anneal_t_max,
                     },
                 }
             )
             row["dataset_id"] = dataset_id
             row["trial_number"] = trial.number
 
+            trial.set_user_attr("search_score", row["search_score"])
             trial.set_user_attr("segment_precision", row["segment_precision"])
             trial.set_user_attr("segment_recall", row["segment_recall"])
             trial.set_user_attr("track_efficiency", row["track_efficiency"])
+            trial.set_user_attr("track_efficiency_soft", row.get("track_efficiency_soft", 0.0))
             trial.set_user_attr("track_fake_rate", row["track_fake_rate"])
             trial.set_user_attr("n_bifurcations", row["n_bifurcations"])
             trial.set_user_attr("run_id", row["run_id"])
@@ -315,82 +477,126 @@ def main() -> int:
             if pruned:
                 raise optuna.TrialPruned(prune_reason)
 
-            return float(row["track_efficiency"])
+            return float(row["search_score"])
 
         sampler = optuna.samplers.TPESampler(seed=args.sampler_seed + d)
         study = optuna.create_study(
             study_name=f"{dataset_id}_study",
             direction="maximize",
             sampler=sampler,
-            pruner=optuna.pruners.MedianPruner(n_startup_trials=max(5, args.workers)),
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=max(8, args.workers)),
         )
-        study.enqueue_trial({
-            "theta_max": 0.35,
-            "angle_penalty": 3.3,
-            "layer_radius_penalty": 3.1,
-            "length_penalty": 0.57,
-            "layer01_radial_tolerance": 0.23,
-        })
-        # Tighten around Run 2's sweet spot
-        study.enqueue_trial({
-            "theta_max": 0.35,
-            "angle_penalty": 3.5,
-            "layer_radius_penalty": 6.2,
-            "length_penalty": 0.35,
-            "layer01_radial_tolerance": 0.25,
-        })
+        for seed_trial in seed_trials:
+            study.enqueue_trial(_clip_seed_trial(seed_trial, search_bounds))
 
-        # Push angle reward + layer_radius harder (try to complete more tracks)
-        study.enqueue_trial({
-            "theta_max": 0.40,
-            "angle_penalty": 4.5,
-            "layer_radius_penalty": 7.5,
-            "length_penalty": 0.25,
-            "layer01_radial_tolerance": 0.20,
-        })
-
-        # Loosen theta_max to let more segment pairs couple, moderate penalties
-        study.enqueue_trial({
-            "theta_max": 0.50,
-            "angle_penalty": 3.0,
-            "layer_radius_penalty": 5.0,
-            "length_penalty": 0.40,
-            "layer01_radial_tolerance": 0.30,
-        })
-
-        # Aggressive: strong alignment, tight angular gate, low length penalty
-        study.enqueue_trial({
-            "theta_max": 0.30,
-            "angle_penalty": 5.0,
-            "layer_radius_penalty": 8.0,
-            "length_penalty": 0.15,
-            "layer01_radial_tolerance": 0.18,
-        })
         study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
 
         dataset_df = pd.DataFrame(dataset_rows)
         if dataset_df.empty or "track_efficiency" not in dataset_df.columns:
             print(f"WARNING: no successful trials for {dataset_id}, skipping")
             continue
-        dataset_df["objective_value"] = dataset_df["track_efficiency"]
+        dataset_df["objective_value"] = dataset_df["search_score"]
 
         dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
-        dataset_df.sort_values("objective_value", ascending=False).to_csv(dataset_csv, index=False)
+        _sort_trials(dataset_df).to_csv(dataset_csv, index=False)
         all_rows.extend(dataset_rows)
 
     summary_df = pd.DataFrame(all_rows)
     if summary_df.empty or "track_efficiency" not in summary_df.columns:
         print("ERROR: no successful trials across all datasets")
         return 1
-    summary_df["objective_value"] = summary_df["track_efficiency"]
+    summary_df["objective_value"] = summary_df["search_score"]
 
     summary_csv = sweep_root / "summary_trials.csv"
-    summary_df.sort_values(["dataset_id", "objective_value"], ascending=[True, False]).to_csv(summary_csv, index=False)
+    _sort_trials(summary_df).to_csv(summary_csv, index=False)
 
     completed_df = summary_df[~summary_df["pruned"].astype(bool)].copy()
-    best_df = completed_df.sort_values("objective_value", ascending=False).groupby("dataset_id", as_index=False).first()
+    if completed_df.empty:
+        print("ERROR: all trials were pruned")
+        return 1
+
+    leaderboard_df = _sort_trials(completed_df).reset_index(drop=True)
+    leaderboard_csv = sweep_root / "leaderboard_trials.csv"
+    leaderboard_df.head(args.leaderboard_size).to_csv(leaderboard_csv, index=False)
+
+    best_df = (
+        _sort_trials(completed_df)
+        .groupby("dataset_id", as_index=False)
+        .first()
+    )
     best_csv = sweep_root / "best_per_dataset.csv"
     best_df.to_csv(best_csv, index=False)
+
+    best_trial = leaderboard_df.iloc[0]
+    best_trial_json = sweep_root / "best_single_trial.json"
+    with best_trial_json.open("w", encoding="utf-8") as fh:
+        json.dump(_row_to_native_dict(best_trial), fh, indent=2)
+        fh.write("\n")
+
+    recommended_params = {
+        key: float(best_df[key].astype(float).median())
+        for key in SEARCH_PARAM_KEYS
+    }
+    recommended_payload = {
+        "selection_rule": "median_of_best_per_dataset_sorted_by_search_score",
+        "search_score_formula": (
+            "1000*track_efficiency + 50*track_efficiency_soft + "
+            "10*segment_precision + 5*segment_recall - "
+            "10*track_fake_rate - 5*n_bifurcations"
+        ),
+        "n_dataset_bests": int(len(best_df)),
+        "recommended_params": recommended_params,
+        "parameter_stats_over_dataset_bests": {
+            key: _series_stats(best_df[key])
+            for key in SEARCH_PARAM_KEYS
+        },
+        "fixed_params": {
+            "merge_penalty": merge_penalty,
+            "fork_penalty": fork_penalty,
+            "anneal_t_min": annealing_base["t_min"],
+            "anneal_n_steps": annealing_base["n_steps"],
+            "anneal_eq_sweeps": annealing_base["eq_sweeps"],
+        },
+        "mean_metrics_over_dataset_bests": {
+            "search_score": float(best_df["search_score"].mean()),
+            "track_efficiency": float(best_df["track_efficiency"].mean()),
+            "track_efficiency_soft": float(best_df["track_efficiency_soft"].mean()),
+            "segment_precision": float(best_df["segment_precision"].mean()),
+            "segment_recall": float(best_df["segment_recall"].mean()),
+            "track_fake_rate": float(best_df["track_fake_rate"].mean()),
+            "n_bifurcations": float(best_df["n_bifurcations"].mean()),
+        },
+        "best_single_trial": _row_to_native_dict(best_trial),
+    }
+
+    recommended_json = sweep_root / "recommended_params.json"
+    with recommended_json.open("w", encoding="utf-8") as fh:
+        json.dump(recommended_payload, fh, indent=2)
+        fh.write("\n")
+
+    recommended_config = {
+        "interaction": {
+            "theta_max": recommended_params["theta_max"],
+            "merge_penalty": merge_penalty,
+            "fork_penalty": fork_penalty,
+            "angle_penalty": recommended_params["angle_penalty"],
+        },
+        "annealing": {
+            "t_min": annealing_base["t_min"],
+            "t_max": recommended_params["anneal_t_max"],
+            "n_steps": annealing_base["n_steps"],
+            "length_penalty": recommended_params["length_penalty"],
+            "layer_radius_penalty": recommended_params["layer_radius_penalty"],
+            "layer01_radial_tolerance": recommended_params["layer01_radial_tolerance"],
+            "eq_sweeps": annealing_base["eq_sweeps"],
+            "log_every_steps": annealing_base["log_every_steps"],
+            "checkpoint_every_steps": annealing_base["checkpoint_every_steps"],
+            "seed": int(ann_cfg.get("seed", 42)),
+        },
+    }
+    recommended_yaml = sweep_root / "recommended_config.yaml"
+    with recommended_yaml.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(recommended_config, fh, sort_keys=False)
 
     with (sweep_root / "manifest.json").open("w", encoding="utf-8") as fh:
         json.dump(
@@ -401,24 +607,40 @@ def main() -> int:
                 "trials_per_dataset": args.trials_per_dataset,
                 "total_trials": int(args.datasets * args.trials_per_dataset),
                 "summary_csv": str(summary_csv),
+                "leaderboard_csv": str(leaderboard_csv),
                 "best_csv": str(best_csv),
+                "best_single_trial_json": str(best_trial_json),
+                "recommended_params_json": str(recommended_json),
+                "recommended_config_yaml": str(recommended_yaml),
+                "search_params": list(SEARCH_PARAM_KEYS),
+                "search_bounds": {
+                    key: {"low": bounds[0], "high": bounds[1]}
+                    for key, bounds in search_bounds.items()
+                },
                 "metrics_tracked": [
                     "segment_precision",
                     "segment_recall",
                     "track_efficiency",
+                    "track_efficiency_soft",
                     "track_fake_rate",
                     "n_bifurcations",
+                    "search_score",
                 ],
-                "objective": "maximize_track_efficiency",
+                "objective": "maximize_search_score",
                 "prune_on_fake_rate": args.max_fake_rate,
                 "prune_on_bifurcations": args.max_bifurcations,
+                "create_plots": bool(args.create_plots),
             },
             fh,
             indent=2,
         )
 
     print(f"Wrote: {summary_csv}")
+    print(f"Wrote: {leaderboard_csv}")
     print(f"Wrote: {best_csv}")
+    print(f"Wrote: {best_trial_json}")
+    print(f"Wrote: {recommended_json}")
+    print(f"Wrote: {recommended_yaml}")
     return 0
 
 

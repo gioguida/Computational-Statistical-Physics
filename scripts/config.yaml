@@ -26,11 +26,11 @@ generation:
     mean_fakes_per_layer: 2.0 # 2
 
 interaction:
-  theta_max: 0.35
+  theta_max: 0.3299
   merge_penalty: 10.0
   fork_penalty: 10.0
-  angle_penalty: 2.0
-  layer_radius_penalty: 5.0
+  angle_penalty: 5.97
+  layer_radius_penalty: 6.00
 
 annealing:
   t_min: 0.001
@@ -38,8 +38,8 @@ annealing:
   n_steps: 600
   checkpoint_every_steps: 10
   toll: 0.000001
-  length_penalty: 0.5
-  layer01_radial_tolerance: 0.23
+  length_penalty: 0.23465
+  layer01_radial_tolerance: 0.1536
   eq_sweeps: 100
   log_every_steps: 100
   seed: 42

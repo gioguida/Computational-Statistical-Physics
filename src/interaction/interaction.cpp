@@ -165,9 +165,21 @@ interaction_mat_t interaction_matrix(
                 ((segments[j].layer_b == segments[i].layer_a) &&
                     (segments[j].hit_b == segments[i].hit_a))
             ) {
-                double reward = seg_alignment(segments[i], segments[j]);
-                // check if the angle is below the threshold
-                double score = reward > std::cos(theta_max) ? reward : -angle_penalty;
+                const double reward = seg_alignment(segments[i], segments[j]);
+                const double clipped_reward = std::max(-1.0, std::min(1.0, reward));
+                const double theta = std::acos(clipped_reward);
+
+                double score = reward;
+                if (theta_max <= 0.0) {
+                    if (theta > 0.0) {
+                        score = -angle_penalty;
+                    }
+                } else if (theta > theta_max) {
+                    // Soften the angular cliff: pairs just above the cutoff get
+                    // an intermediate score before reaching the full penalty.
+                    const double excess = std::min((theta - theta_max) / theta_max, 1.0);
+                    score = (1.0 - excess) * reward + excess * (-angle_penalty);
+                }
                 J[i].emplace_back(std::pair<int,double>{j, score});
                 J[j].emplace_back(std::pair<int,double>{i, score});
 

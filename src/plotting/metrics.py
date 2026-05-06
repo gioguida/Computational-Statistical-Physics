@@ -130,9 +130,29 @@ def _compute_energy_decomposition(edges: pd.DataFrame, spins: pd.Series) -> tupl
     return h_total, h_alignment, h_competing
 
 
-def _plot_cv_vs_t(trace: pd.DataFrame, out_path: Path) -> float:
+def _freeze_temperature(trace: pd.DataFrame) -> float:
     idx_peak = int(trace["C_v"].idxmax())
-    freeze_temperature = float(trace.loc[idx_peak, "T"])
+    return float(trace.loc[idx_peak, "T"])
+
+
+def _early_freeze_flag(trace: pd.DataFrame) -> bool:
+    # Flag if acceptance falls below 0.01 while additional lower energies are still reached later.
+    future_min = trace["H_min_so_far"][::-1].cummin()[::-1]
+    low_acc_mask = trace["acceptance_rate"] < 0.01
+    still_declining_mask = future_min < (trace["H_min_so_far"] - 1e-12)
+    return bool((low_acc_mask & still_declining_mask).any())
+
+
+def _late_minimum_flag(trace: pd.DataFrame) -> bool:
+    n_rows = len(trace)
+    idx_min = int(trace["H_min_so_far"].idxmin())
+    late_threshold = int(0.9 * n_rows)
+    return idx_min >= late_threshold
+
+
+def _plot_cv_vs_t(trace: pd.DataFrame, out_path: Path) -> float:
+    freeze_temperature = _freeze_temperature(trace)
+    idx_peak = int(trace["C_v"].idxmax())
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
     ax.plot(trace["T"], trace["C_v"], marker="o", linewidth=1.4, markersize=3)
@@ -150,11 +170,7 @@ def _plot_cv_vs_t(trace: pd.DataFrame, out_path: Path) -> float:
 
 
 def _plot_acceptance_vs_t(trace: pd.DataFrame, out_path: Path) -> bool:
-    # Flag if acceptance falls below 0.01 while additional lower energies are still reached later.
-    future_min = trace["H_min_so_far"][::-1].cummin()[::-1]
-    low_acc_mask = trace["acceptance_rate"] < 0.01
-    still_declining_mask = future_min < (trace["H_min_so_far"] - 1e-12)
-    early_freeze_flag = bool((low_acc_mask & still_declining_mask).any())
+    early_freeze_flag = _early_freeze_flag(trace)
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
     ax.plot(trace["T"], trace["acceptance_rate"], marker="o", linewidth=1.4, markersize=3)
@@ -173,10 +189,7 @@ def _plot_acceptance_vs_t(trace: pd.DataFrame, out_path: Path) -> bool:
 
 
 def _plot_energy_trace(trace: pd.DataFrame, out_path: Path) -> bool:
-    n_rows = len(trace)
-    idx_min = int(trace["H_min_so_far"].idxmin())
-    late_threshold = int(0.9 * n_rows)
-    late_minimum = idx_min >= late_threshold
+    late_minimum = _late_minimum_flag(trace)
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
     ax.plot(trace["step"], trace["H_mean"], label="H_mean", linewidth=1.5)
@@ -200,6 +213,8 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
     interaction_dir = run_dir / "interaction"
     annealing_dir = run_dir / "annealing"
     plot_dir = run_dir / "plots"
+    create_plots = bool(cfg.get("create_plots", True))
+    verbose = bool(cfg.get("verbose", True))
 
     hits_csv = Path(cfg["training_hits_csv"]).resolve()
     truth_csv = Path(cfg["ground_truth_csv"]).resolve()
@@ -252,13 +267,18 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
     )
 
     # Annealing quality indicators
-    freeze_temperature = _plot_cv_vs_t(trace, plot_dir / "cv_vs_T.png")
-    low_acceptance_while_declining = _plot_acceptance_vs_t(trace, plot_dir / "acceptance_vs_T.png")
-    late_minimum = _plot_energy_trace(trace, plot_dir / "energy_trace.png")
+    if create_plots:
+        freeze_temperature = _plot_cv_vs_t(trace, plot_dir / "cv_vs_T.png")
+        low_acceptance_while_declining = _plot_acceptance_vs_t(trace, plot_dir / "acceptance_vs_T.png")
+        late_minimum = _plot_energy_trace(trace, plot_dir / "energy_trace.png")
+    else:
+        freeze_temperature = _freeze_temperature(trace)
+        low_acceptance_while_declining = _early_freeze_flag(trace)
+        late_minimum = _late_minimum_flag(trace)
 
-    if low_acceptance_while_declining:
+    if verbose and low_acceptance_while_declining:
         print("Warning: acceptance_rate dropped below 0.01 while lower energies were still reached later.")
-    if late_minimum:
+    if verbose and late_minimum:
         print("Warning: H_min_so_far was reached in the last 10% of steps; consider more steps or lower t_min.")
 
     summary = {
@@ -288,10 +308,12 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
         json.dump(summary, fh, indent=2)
         fh.write("\n")
 
-    print("\nMetrics summary:")
-    for key in summary.keys():
-        print(f"{key:22}:: {summary[key]}")
-    print(f"\nSaved metrics to: {metrics_path}")
-    print(f"Saved plots to:   {plot_dir}")
+    if verbose:
+        print("\nMetrics summary:")
+        for key in summary.keys():
+            print(f"{key:22}:: {summary[key]}")
+        print(f"\nSaved metrics to: {metrics_path}")
+        if create_plots:
+            print(f"Saved plots to:   {plot_dir}")
 
     return summary
