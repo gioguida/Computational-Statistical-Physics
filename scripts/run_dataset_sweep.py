@@ -324,6 +324,48 @@ def main() -> int:
             sampler=sampler,
             pruner=optuna.pruners.MedianPruner(n_startup_trials=max(5, args.workers)),
         )
+        study.enqueue_trial({
+            "theta_max": 0.35,
+            "angle_penalty": 3.3,
+            "layer_radius_penalty": 3.1,
+            "length_penalty": 0.57,
+            "layer01_radial_tolerance": 0.23,
+        })
+        # Tighten around Run 2's sweet spot
+        study.enqueue_trial({
+            "theta_max": 0.35,
+            "angle_penalty": 3.5,
+            "layer_radius_penalty": 6.2,
+            "length_penalty": 0.35,
+            "layer01_radial_tolerance": 0.25,
+        })
+
+        # Push angle reward + layer_radius harder (try to complete more tracks)
+        study.enqueue_trial({
+            "theta_max": 0.40,
+            "angle_penalty": 4.5,
+            "layer_radius_penalty": 7.5,
+            "length_penalty": 0.25,
+            "layer01_radial_tolerance": 0.20,
+        })
+
+        # Loosen theta_max to let more segment pairs couple, moderate penalties
+        study.enqueue_trial({
+            "theta_max": 0.50,
+            "angle_penalty": 3.0,
+            "layer_radius_penalty": 5.0,
+            "length_penalty": 0.40,
+            "layer01_radial_tolerance": 0.30,
+        })
+
+        # Aggressive: strong alignment, tight angular gate, low length penalty
+        study.enqueue_trial({
+            "theta_max": 0.30,
+            "angle_penalty": 5.0,
+            "layer_radius_penalty": 8.0,
+            "length_penalty": 0.15,
+            "layer01_radial_tolerance": 0.18,
+        })
         study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
 
         dataset_df = pd.DataFrame(dataset_rows)

@@ -30,8 +30,8 @@ uv run scripts/run_dataset_sweep.py \
   --trials-per-dataset 64 \
   --workers 64 \
   --seeds-start 1000 \
-  --theta-max 0.25 0.45 \
-  --angle-penalty 1.0 4.0 \
-  --layer-radius-penalty 2.0 8.0 \
+  --theta-max 0.25 0.50 \
+  --angle-penalty 1.0 g.0 \
+  --layer-radius-penalty 3.0 10.0 \
   --length-penalty 0.2 1.0 \
   --layer01-radial-tolerance 0.15 0.30

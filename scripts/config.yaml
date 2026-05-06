@@ -34,14 +34,14 @@ interaction:
 
 annealing:
   t_min: 0.001
-  t_max: 2.0
-  n_steps: 300
+  t_max: 4.0
+  n_steps: 600
   checkpoint_every_steps: 10
   toll: 0.000001
   length_penalty: 0.5
   layer01_radial_tolerance: 0.23
   eq_sweeps: 100
-  log_every_steps: 10
+  log_every_steps: 100
   seed: 42
 
 plotting:
