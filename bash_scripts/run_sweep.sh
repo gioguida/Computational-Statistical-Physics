@@ -19,9 +19,6 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
-# Ensure Python deps are present for this user environment.
-uv sync
-
 # Build once
 cmake -S . -B build
 cmake --build build -j 64

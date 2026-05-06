@@ -148,14 +148,19 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
         }
     )
 
-    return {
+    row = {
         "run_id": run_dir.name,
         **p,
-        "segment_precision": float(metrics["precision"]),
-        "segment_recall": float(metrics["TPR"]),
-        "track_efficiency": float(metrics["track_efficiency"]),
-        "track_fake_rate": float(metrics["fake_rate"]),
+        "segment_precision": float(metrics.get("precision", 0.0)),
+        "segment_recall": float(metrics.get("TPR", 0.0)),
+        "track_efficiency": float(metrics.get("track_efficiency", 0.0)),
+        "track_fake_rate": float(metrics.get("fake_rate", 0.0)),
+        "n_bifurcations": int(metrics.get("n_bifurcations", 0)),
     }
+    for key, value in metrics.items():
+        if key not in row:
+            row[key] = value
+    return row
 
 
 def _bounds(values: list[float], name: str) -> tuple[float, float]:
@@ -180,6 +185,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--sampler-seed", type=int, default=42)
+    parser.add_argument("--max-fake-rate", type=float, default=None)
+    parser.add_argument("--max-bifurcations", type=int, default=None)
     return parser.parse_args()
 
 
@@ -242,7 +249,7 @@ def main() -> int:
 
         dataset_rows: list[dict[str, Any]] = []
 
-        def objective(trial: optuna.Trial) -> tuple[float, float, float, float]:
+        def objective(trial: optuna.Trial) -> float:
             theta_max = trial.suggest_float("theta_max", theta_lo, theta_hi)
             angle_penalty = trial.suggest_float("angle_penalty", angle_lo, angle_hi)
             layer_radius_penalty = trial.suggest_float("layer_radius_penalty", layer_radius_lo, layer_radius_hi)
@@ -276,54 +283,64 @@ def main() -> int:
             )
             row["dataset_id"] = dataset_id
             row["trial_number"] = trial.number
-            dataset_rows.append(row)
 
             trial.set_user_attr("segment_precision", row["segment_precision"])
             trial.set_user_attr("segment_recall", row["segment_recall"])
             trial.set_user_attr("track_efficiency", row["track_efficiency"])
             trial.set_user_attr("track_fake_rate", row["track_fake_rate"])
+            trial.set_user_attr("n_bifurcations", row["n_bifurcations"])
             trial.set_user_attr("run_id", row["run_id"])
 
-            return (
-                row["segment_precision"],
-                row["segment_recall"],
-                row["track_efficiency"],
-                row["track_fake_rate"],
-            )
+            pruned = False
+            prune_reason = None
+            if args.max_fake_rate is not None and row["track_fake_rate"] > args.max_fake_rate:
+                pruned = True
+                prune_reason = (
+                    f"fake_rate {row['track_fake_rate']:.6f} exceeded threshold {args.max_fake_rate:.6f}"
+                )
+            if (
+                not pruned
+                and args.max_bifurcations is not None
+                and int(row["n_bifurcations"]) > int(args.max_bifurcations)
+            ):
+                pruned = True
+                prune_reason = (
+                    f"n_bifurcations {int(row['n_bifurcations'])} exceeded threshold {int(args.max_bifurcations)}"
+                )
+
+            row["pruned"] = pruned
+            row["prune_reason"] = prune_reason
+            dataset_rows.append(row)
+
+            if pruned:
+                raise optuna.TrialPruned(prune_reason)
+
+            return float(row["track_efficiency"])
 
         sampler = optuna.samplers.TPESampler(seed=args.sampler_seed + d)
         study = optuna.create_study(
             study_name=f"{dataset_id}_study",
-            directions=["maximize", "maximize", "maximize", "minimize"],
+            direction="maximize",
             sampler=sampler,
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=max(5, args.workers)),
         )
         study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
 
         dataset_df = pd.DataFrame(dataset_rows)
-        # Convenience scalar ranking for quick selection; Optuna objective is still multi-objective.
-        dataset_df["composite_score"] = (
-            dataset_df["segment_precision"]
-            + dataset_df["segment_recall"]
-            + dataset_df["track_efficiency"]
-            - dataset_df["track_fake_rate"]
-        )
+        dataset_df["objective_value"] = dataset_df["track_efficiency"]
 
         dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
-        dataset_df.sort_values("composite_score", ascending=False).to_csv(dataset_csv, index=False)
+        dataset_df.sort_values("objective_value", ascending=False).to_csv(dataset_csv, index=False)
         all_rows.extend(dataset_rows)
 
     summary_df = pd.DataFrame(all_rows)
-    summary_df["composite_score"] = (
-        summary_df["segment_precision"]
-        + summary_df["segment_recall"]
-        + summary_df["track_efficiency"]
-        - summary_df["track_fake_rate"]
-    )
+    summary_df["objective_value"] = summary_df["track_efficiency"]
 
     summary_csv = sweep_root / "summary_trials.csv"
-    summary_df.sort_values(["dataset_id", "composite_score"], ascending=[True, False]).to_csv(summary_csv, index=False)
+    summary_df.sort_values(["dataset_id", "objective_value"], ascending=[True, False]).to_csv(summary_csv, index=False)
 
-    best_df = summary_df.sort_values("composite_score", ascending=False).groupby("dataset_id", as_index=False).first()
+    completed_df = summary_df[~summary_df["pruned"].astype(bool)].copy()
+    best_df = completed_df.sort_values("objective_value", ascending=False).groupby("dataset_id", as_index=False).first()
     best_csv = sweep_root / "best_per_dataset.csv"
     best_df.to_csv(best_csv, index=False)
 
@@ -342,7 +359,11 @@ def main() -> int:
                     "segment_recall",
                     "track_efficiency",
                     "track_fake_rate",
+                    "n_bifurcations",
                 ],
+                "objective": "maximize_track_efficiency",
+                "prune_on_fake_rate": args.max_fake_rate,
+                "prune_on_bifurcations": args.max_bifurcations,
             },
             fh,
             indent=2,
