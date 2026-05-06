@@ -20,8 +20,6 @@ int count_selected_spins(const std::vector<int>& state) {
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
     int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps) {
-    std::filesystem::create_directory("../../results");
-    
     std::cout << "--- Starting simulation ---" << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
 

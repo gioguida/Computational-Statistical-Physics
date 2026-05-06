@@ -327,6 +327,9 @@ def main() -> int:
         study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
 
         dataset_df = pd.DataFrame(dataset_rows)
+        if dataset_df.empty or "track_efficiency" not in dataset_df.columns:
+            print(f"WARNING: no successful trials for {dataset_id}, skipping")
+            continue
         dataset_df["objective_value"] = dataset_df["track_efficiency"]
 
         dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
@@ -334,6 +337,9 @@ def main() -> int:
         all_rows.extend(dataset_rows)
 
     summary_df = pd.DataFrame(all_rows)
+    if summary_df.empty or "track_efficiency" not in summary_df.columns:
+        print("ERROR: no successful trials across all datasets")
+        return 1
     summary_df["objective_value"] = summary_df["track_efficiency"]
 
     summary_csv = sweep_root / "summary_trials.csv"
