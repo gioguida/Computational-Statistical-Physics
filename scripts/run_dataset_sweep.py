@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import itertools
 import json
 import subprocess
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import optuna
 import pandas as pd
 import yaml
 
@@ -149,19 +148,29 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
         }
     )
 
-    row = {
-        "dataset_id": job["dataset_id"],
+    return {
         "run_id": run_dir.name,
         **p,
-        **metrics,
+        "segment_precision": float(metrics["precision"]),
+        "segment_recall": float(metrics["TPR"]),
+        "track_efficiency": float(metrics["track_efficiency"]),
+        "track_fake_rate": float(metrics["fake_rate"]),
     }
-    return row
+
+
+def _bounds(values: list[float], name: str) -> tuple[float, float]:
+    if not values:
+        raise ValueError(f"Missing values for {name}")
+    lo = min(values)
+    hi = max(values)
+    return (float(lo), float(hi))
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Dataset-aware parameter sweep")
+    parser = argparse.ArgumentParser(description="Dataset-aware Bayesian optimization with Optuna")
     parser.add_argument("--config", default="scripts/config.yaml")
     parser.add_argument("--datasets", type=int, default=8)
+    parser.add_argument("--trials-per-dataset", type=int, default=64)
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--seeds-start", type=int, default=1000)
     parser.add_argument("--output-root", default="results/sweeps")
@@ -170,6 +179,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layer-radius-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
+    parser.add_argument("--sampler-seed", type=int, default=42)
     return parser.parse_args()
 
 
@@ -205,6 +215,12 @@ def main() -> int:
         "checkpoint_every_steps": int(ann_cfg.get("checkpoint_every_steps", 10)),
     }
 
+    theta_lo, theta_hi = _bounds(args.theta_max, "theta_max")
+    angle_lo, angle_hi = _bounds(args.angle_penalty, "angle_penalty")
+    layer_radius_lo, layer_radius_hi = _bounds(args.layer_radius_penalty, "layer_radius_penalty")
+    length_lo, length_hi = _bounds(args.length_penalty, "length_penalty")
+    tol_lo, tol_hi = _bounds(args.layer01_radial_tolerance, "layer01_radial_tolerance")
+
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
     datasets_root = sweep_root / "datasets"
@@ -212,34 +228,37 @@ def main() -> int:
     datasets_root.mkdir(parents=True, exist_ok=True)
     runs_root.mkdir(parents=True, exist_ok=True)
 
-    grid = list(
-        itertools.product(
-            args.theta_max,
-            args.angle_penalty,
-            args.layer_radius_penalty,
-            args.length_penalty,
-            args.layer01_radial_tolerance,
-        )
-    )
+    print(f"Sweep root: {sweep_root}")
+    print(f"Datasets: {args.datasets}")
+    print(f"Trials per dataset: {args.trials_per_dataset}")
 
-    jobs: list[dict[str, Any]] = []
+    all_rows: list[dict[str, Any]] = []
+
     for d in range(args.datasets):
         dataset_id = f"ds_{d:03d}"
         dataset_dir = datasets_root / dataset_id
         dataset_seed = args.seeds_start + d
         train_csv, gt_csv = generate_dataset(gen_cfg, dataset_seed, dataset_dir)
 
-        for i, (theta, angle, layer_r, length_p, tol01) in enumerate(grid):
-            run_id = f"{dataset_id}_cfg_{i:04d}"
+        dataset_rows: list[dict[str, Any]] = []
+
+        def objective(trial: optuna.Trial) -> tuple[float, float, float, float]:
+            theta_max = trial.suggest_float("theta_max", theta_lo, theta_hi)
+            angle_penalty = trial.suggest_float("angle_penalty", angle_lo, angle_hi)
+            layer_radius_penalty = trial.suggest_float("layer_radius_penalty", layer_radius_lo, layer_radius_hi)
+            length_penalty = trial.suggest_float("length_penalty", length_lo, length_hi)
+            layer01_radial_tolerance = trial.suggest_float("layer01_radial_tolerance", tol_lo, tol_hi)
+
+            run_id = f"{dataset_id}_trial_{trial.number:04d}"
             run_dir = runs_root / run_id
-            jobs.append(
+
+            row = run_one_job(
                 {
                     "project_root": str(PROJECT_ROOT),
                     "build_dir": str(build_dir),
                     "run_dir": str(run_dir),
                     "hits_csv": str(train_csv),
                     "gt_csv": str(gt_csv),
-                    "dataset_id": dataset_id,
                     "n_layers": len(detector_layers),
                     "first_gap": first_gap,
                     "merge_penalty": merge_penalty,
@@ -247,31 +266,64 @@ def main() -> int:
                     "annealing_base": annealing_base,
                     "anneal_seed": int(ann_cfg.get("seed", 42)),
                     "params": {
-                        "theta_max": theta,
-                        "angle_penalty": angle,
-                        "layer_radius_penalty": layer_r,
-                        "length_penalty": length_p,
-                        "layer01_radial_tolerance": tol01,
+                        "theta_max": theta_max,
+                        "angle_penalty": angle_penalty,
+                        "layer_radius_penalty": layer_radius_penalty,
+                        "length_penalty": length_penalty,
+                        "layer01_radial_tolerance": layer01_radial_tolerance,
                     },
                 }
             )
+            row["dataset_id"] = dataset_id
+            row["trial_number"] = trial.number
+            dataset_rows.append(row)
 
-    print(f"Sweep root: {sweep_root}")
-    print(f"Datasets: {args.datasets}")
-    print(f"Parameter combinations per dataset: {len(grid)}")
-    print(f"Total jobs: {len(jobs)}")
+            trial.set_user_attr("segment_precision", row["segment_precision"])
+            trial.set_user_attr("segment_recall", row["segment_recall"])
+            trial.set_user_attr("track_efficiency", row["track_efficiency"])
+            trial.set_user_attr("track_fake_rate", row["track_fake_rate"])
+            trial.set_user_attr("run_id", row["run_id"])
 
-    results: list[dict[str, Any]] = []
-    with ProcessPoolExecutor(max_workers=args.workers) as ex:
-        futures = [ex.submit(run_one_job, job) for job in jobs]
-        for f in as_completed(futures):
-            results.append(f.result())
+            return (
+                row["segment_precision"],
+                row["segment_recall"],
+                row["track_efficiency"],
+                row["track_fake_rate"],
+            )
 
-    summary_df = pd.DataFrame(results).sort_values(["dataset_id", "F1"], ascending=[True, False])
-    summary_csv = sweep_root / "summary_metrics.csv"
-    summary_df.to_csv(summary_csv, index=False)
+        sampler = optuna.samplers.TPESampler(seed=args.sampler_seed + d)
+        study = optuna.create_study(
+            study_name=f"{dataset_id}_study",
+            directions=["maximize", "maximize", "maximize", "minimize"],
+            sampler=sampler,
+        )
+        study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
 
-    best_df = summary_df.groupby("dataset_id", as_index=False).first()
+        dataset_df = pd.DataFrame(dataset_rows)
+        # Convenience scalar ranking for quick selection; Optuna objective is still multi-objective.
+        dataset_df["composite_score"] = (
+            dataset_df["segment_precision"]
+            + dataset_df["segment_recall"]
+            + dataset_df["track_efficiency"]
+            - dataset_df["track_fake_rate"]
+        )
+
+        dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
+        dataset_df.sort_values("composite_score", ascending=False).to_csv(dataset_csv, index=False)
+        all_rows.extend(dataset_rows)
+
+    summary_df = pd.DataFrame(all_rows)
+    summary_df["composite_score"] = (
+        summary_df["segment_precision"]
+        + summary_df["segment_recall"]
+        + summary_df["track_efficiency"]
+        - summary_df["track_fake_rate"]
+    )
+
+    summary_csv = sweep_root / "summary_trials.csv"
+    summary_df.sort_values(["dataset_id", "composite_score"], ascending=[True, False]).to_csv(summary_csv, index=False)
+
+    best_df = summary_df.sort_values("composite_score", ascending=False).groupby("dataset_id", as_index=False).first()
     best_csv = sweep_root / "best_per_dataset.csv"
     best_df.to_csv(best_csv, index=False)
 
@@ -281,10 +333,16 @@ def main() -> int:
                 "created_at": stamp,
                 "datasets": args.datasets,
                 "workers": args.workers,
-                "grid_size": len(grid),
-                "total_jobs": len(jobs),
+                "trials_per_dataset": args.trials_per_dataset,
+                "total_trials": int(args.datasets * args.trials_per_dataset),
                 "summary_csv": str(summary_csv),
                 "best_csv": str(best_csv),
+                "metrics_tracked": [
+                    "segment_precision",
+                    "segment_recall",
+                    "track_efficiency",
+                    "track_fake_rate",
+                ],
             },
             fh,
             indent=2,
