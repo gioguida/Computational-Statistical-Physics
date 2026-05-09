@@ -2,8 +2,9 @@
 #SBATCH --job-name=sweep
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=128
 #SBATCH --time=08:00:00
+#SBATCH --constraint=EPYC_7763
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -11,6 +12,8 @@ set -euo pipefail
 
 PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 cd "$PROJECT_ROOT"
+
+mkdir -p logs
 
 module load stack gcc cmake python
 
@@ -21,17 +24,27 @@ export NUMEXPR_NUM_THREADS=1
 
 # Build once
 cmake -S . -B build
-cmake --build build -j 64
+cmake --build build -j 128
 
-# Bayesian optimization sweep
+# Dataset-ensemble Bayesian optimization sweep.
+# --workers controls concurrent Optuna trials.
+# --ensemble-workers controls concurrent dataset evaluations inside each trial.
+# Keep workers * ensemble-workers <= 128 for this Slurm allocation.
+# Pruning is off by default; add --pruning to enable Optuna median pruning.
 uv run scripts/run_dataset_sweep.py \
   --config scripts/config.yaml \
-  --datasets 8 \
+  --datasets 16 \
   --trials-per-dataset 64 \
-  --workers 64 \
+  --workers 8 \
+  --ensemble-workers 16 \
   --seeds-start 1000 \
+  --objective-metric track_efficiency \
+  --objective-direction maximize \
+  --ensemble-statistic mean \
+  --trim-fraction 0.1 \
+  --min-datasets-before-pruning 3 \
   --theta-max 0.25 0.50 \
-  --angle-penalty 1.0 g.0 \
+  --angle-penalty 1.0 5.0 \
   --layer-radius-penalty 3.0 10.0 \
   --length-penalty 0.2 1.0 \
   --layer01-radial-tolerance 0.15 0.30

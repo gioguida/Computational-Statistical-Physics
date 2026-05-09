@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as futures
 import datetime as dt
 import json
+import math
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,17 @@ from src.hits.hits import Detector
 from src.plotting.metrics import visualize_metrics
 
 
+ENSEMBLE_STATISTICS = (
+    "mean",
+    "median",
+    "min",
+    "max",
+    "trim_mean",
+    "mean_minus_std",
+    "mean_minus_2std",
+)
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh)
@@ -34,8 +48,13 @@ def load_yaml(path: Path) -> dict[str, Any]:
 def generate_dataset(cfg: DataConfig, seed: int, out_dir: Path) -> tuple[Path, Path]:
     rng = np.random.default_rng(seed)
 
-    experiment = Detector(cfg.detector_layers, cfg.n_particles, cfg.traj_radius_low, cfg.traj_radius_high)
-    clean_hits = experiment.get_hits()
+    legacy_state = np.random.get_state()
+    try:
+        np.random.seed(seed)
+        experiment = Detector(cfg.detector_layers, cfg.n_particles, cfg.traj_radius_low, cfg.traj_radius_high)
+        clean_hits = experiment.get_hits()
+    finally:
+        np.random.set_state(legacy_state)
     n_real_hits = len(clean_hits)
 
     noisy_hits = clean_hits.copy()
@@ -102,12 +121,18 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
     run_cmd(
         [
             str(interaction_bin),
-            "--hits-csv", str(hits_csv),
-            "--out-dir", str(inter_dir),
-            "--theta-max", str(p["theta_max"]),
-            "--merge-penalty", str(job["merge_penalty"]),
-            "--fork-penalty", str(job["fork_penalty"]),
-            "--angle-penalty", str(p["angle_penalty"]),
+            "--hits-csv",
+            str(hits_csv),
+            "--out-dir",
+            str(inter_dir),
+            "--theta-max",
+            str(p["theta_max"]),
+            "--merge-penalty",
+            str(job["merge_penalty"]),
+            "--fork-penalty",
+            str(job["fork_penalty"]),
+            "--angle-penalty",
+            str(p["angle_penalty"]),
         ],
         cwd=project_root,
     )
@@ -115,22 +140,38 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
     run_cmd(
         [
             str(annealing_bin),
-            "--hits-csv", str(hits_csv),
-            "--segments-csv", str(inter_dir / "segments.csv"),
-            "--edges-csv", str(inter_dir / "J_edges.csv"),
-            "--out-dir", str(ann_dir),
-            "--t-min", str(ann["t_min"]),
-            "--t-max", str(ann["t_max"]),
-            "--n-steps", str(ann["n_steps"]),
-            "--toll", str(ann["toll"]),
-            "--length-penalty", str(p["length_penalty"]),
-            "--layer-radius-penalty", str(p["layer_radius_penalty"]),
-            "--layer01-radial-tolerance", str(p["layer01_radial_tolerance"]),
-            "--first-gap", str(job["first_gap"]),
-            "--eq-sweeps", str(ann["eq_sweeps"]),
-            "--log-every-steps", str(ann["log_every_steps"]),
-            "--checkpoint-every-steps", str(ann["checkpoint_every_steps"]),
-            "--seed", str(job["anneal_seed"]),
+            "--hits-csv",
+            str(hits_csv),
+            "--segments-csv",
+            str(inter_dir / "segments.csv"),
+            "--edges-csv",
+            str(inter_dir / "J_edges.csv"),
+            "--out-dir",
+            str(ann_dir),
+            "--t-min",
+            str(ann["t_min"]),
+            "--t-max",
+            str(ann["t_max"]),
+            "--n-steps",
+            str(ann["n_steps"]),
+            "--toll",
+            str(ann["toll"]),
+            "--length-penalty",
+            str(p["length_penalty"]),
+            "--layer-radius-penalty",
+            str(p["layer_radius_penalty"]),
+            "--layer01-radial-tolerance",
+            str(p["layer01_radial_tolerance"]),
+            "--first-gap",
+            str(job["first_gap"]),
+            "--eq-sweeps",
+            str(ann["eq_sweeps"]),
+            "--log-every-steps",
+            str(ann["log_every_steps"]),
+            "--checkpoint-every-steps",
+            str(ann["checkpoint_every_steps"]),
+            "--seed",
+            str(job["anneal_seed"]),
         ],
         cwd=project_root,
     )
@@ -172,11 +213,12 @@ def _bounds(values: list[float], name: str) -> tuple[float, float]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Dataset-aware Bayesian optimization with Optuna")
+    parser = argparse.ArgumentParser(description="Dataset-ensemble Bayesian optimization with Optuna")
     parser.add_argument("--config", default="scripts/config.yaml")
     parser.add_argument("--datasets", type=int, default=8)
     parser.add_argument("--trials-per-dataset", type=int, default=64)
     parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument("--ensemble-workers", type=int, default=8)
     parser.add_argument("--seeds-start", type=int, default=1000)
     parser.add_argument("--output-root", default="results/sweeps")
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
@@ -187,11 +229,87 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sampler-seed", type=int, default=42)
     parser.add_argument("--max-fake-rate", type=float, default=None)
     parser.add_argument("--max-bifurcations", type=int, default=None)
+    parser.add_argument("--objective-metric", default="track_efficiency")
+    parser.add_argument("--objective-direction", choices=("maximize", "minimize"), default="maximize")
+    parser.add_argument("--ensemble-statistic", choices=ENSEMBLE_STATISTICS, default="mean")
+    parser.add_argument("--trim-fraction", type=float, default=0.1)
+    parser.add_argument("--pruning", action="store_true")
+    parser.add_argument("--min-datasets-before-pruning", type=int, default=3)
     return parser.parse_args()
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if args.datasets <= 0:
+        raise ValueError("--datasets must be positive")
+    if args.trials_per_dataset <= 0:
+        raise ValueError("--trials-per-dataset must be positive")
+    if args.workers <= 0:
+        raise ValueError("--workers must be positive")
+    if args.ensemble_workers <= 0:
+        raise ValueError("--ensemble-workers must be positive")
+    if not (0.0 < args.trim_fraction < 0.5):
+        raise ValueError("--trim-fraction must be in (0, 0.5)")
+    if args.min_datasets_before_pruning < 1:
+        raise ValueError("--min-datasets-before-pruning must be at least 1")
+    if args.min_datasets_before_pruning >= args.datasets:
+        raise ValueError("--min-datasets-before-pruning must be less than --datasets")
+
+
+def finite_values(values: list[float]) -> np.ndarray:
+    return np.array([value for value in values if math.isfinite(value)], dtype=float)
+
+
+def aggregate_values(values: list[float], statistic: str, trim_fraction: float) -> float:
+    arr = finite_values(values)
+    if len(arr) == 0:
+        return float("nan")
+    if statistic == "mean":
+        return float(arr.mean())
+    if statistic == "median":
+        return float(np.median(arr))
+    if statistic == "min":
+        return float(arr.min())
+    if statistic == "max":
+        return float(arr.max())
+    if statistic == "mean_minus_std":
+        return float(arr.mean() - arr.std(ddof=1)) if len(arr) > 1 else float(arr.mean())
+    if statistic == "mean_minus_2std":
+        return float(arr.mean() - 2.0 * arr.std(ddof=1)) if len(arr) > 1 else float(arr.mean())
+    if statistic == "trim_mean":
+        sorted_arr = np.sort(arr)
+        trim_count = int(math.floor(len(sorted_arr) * trim_fraction))
+        if trim_count > 0 and 2 * trim_count < len(sorted_arr):
+            sorted_arr = sorted_arr[trim_count:-trim_count]
+        return float(sorted_arr.mean())
+    raise ValueError(f"Unknown ensemble statistic: {statistic}")
+
+
+def ensemble_summary(values: list[float]) -> dict[str, float]:
+    arr = finite_values(values)
+    if len(arr) == 0:
+        return {
+            "ensemble_mean": float("nan"),
+            "ensemble_median": float("nan"),
+            "ensemble_std": float("nan"),
+            "ensemble_min": float("nan"),
+            "ensemble_max": float("nan"),
+        }
+    return {
+        "ensemble_mean": float(arr.mean()),
+        "ensemble_median": float(np.median(arr)),
+        "ensemble_std": float(arr.std(ddof=1)) if len(arr) > 1 else 0.0,
+        "ensemble_min": float(arr.min()),
+        "ensemble_max": float(arr.max()),
+    }
+
+
+def failed_objective(direction: str) -> float:
+    return float("inf") if direction == "minimize" else float("-inf")
 
 
 def main() -> int:
     args = parse_args()
+    validate_args(args)
     cfg = load_yaml((PROJECT_ROOT / args.config).resolve())
 
     build_dir = (PROJECT_ROOT / str(cfg.get("build", {}).get("build_dir", "build"))).resolve()
@@ -235,62 +353,75 @@ def main() -> int:
     datasets_root.mkdir(parents=True, exist_ok=True)
     runs_root.mkdir(parents=True, exist_ok=True)
 
+    total_trials = int(args.trials_per_dataset)
     print(f"Sweep root: {sweep_root}")
     print(f"Datasets: {args.datasets}")
     print(f"Trials per dataset: {args.trials_per_dataset}")
+    print(
+        (
+            f"Parallelism: {args.workers} trials × {args.ensemble_workers} ensemble workers "
+            f"= {args.workers * args.ensemble_workers} max concurrent pipelines"
+        ),
+        flush=True,
+    )
+    print(
+        (
+            f"Objective: {args.objective_direction} {args.ensemble_statistic} "
+            f"of {args.objective_metric} over {args.datasets} datasets"
+        ),
+        flush=True,
+    )
 
-    all_rows: list[dict[str, Any]] = []
-
+    datasets: list[dict[str, Any]] = []
     for d in range(args.datasets):
         dataset_id = f"ds_{d:03d}"
         dataset_dir = datasets_root / dataset_id
         dataset_seed = args.seeds_start + d
         train_csv, gt_csv = generate_dataset(gen_cfg, dataset_seed, dataset_dir)
+        datasets.append(
+            {
+                "dataset_id": dataset_id,
+                "dataset_index": d,
+                "dataset_seed": dataset_seed,
+                "train_csv": str(train_csv),
+                "gt_csv": str(gt_csv),
+            }
+        )
 
-        dataset_rows: list[dict[str, Any]] = []
+    print(f"Generated {len(datasets)} datasets upfront.", flush=True)
 
-        def objective(trial: optuna.Trial) -> float:
-            theta_max = trial.suggest_float("theta_max", theta_lo, theta_hi)
-            angle_penalty = trial.suggest_float("angle_penalty", angle_lo, angle_hi)
-            layer_radius_penalty = trial.suggest_float("layer_radius_penalty", layer_radius_lo, layer_radius_hi)
-            length_penalty = trial.suggest_float("length_penalty", length_lo, length_hi)
-            layer01_radial_tolerance = trial.suggest_float("layer01_radial_tolerance", tol_lo, tol_hi)
+    all_rows: list[dict[str, Any]] = []
+    ensemble_rows: list[dict[str, Any]] = []
+    rows_lock = threading.Lock()
 
-            run_id = f"{dataset_id}_trial_{trial.number:04d}"
-            run_dir = runs_root / run_id
-
+    def evaluate_dataset(trial_number: int, params: dict[str, float], dataset: dict[str, Any]) -> dict[str, Any]:
+        run_id = f"{dataset['dataset_id']}_trial_{trial_number:04d}"
+        run_dir = runs_root / run_id
+        base_row: dict[str, Any] = {
+            "dataset_id": dataset["dataset_id"],
+            "dataset_seed": dataset["dataset_seed"],
+            "trial_number": trial_number,
+            "run_id": run_id,
+            **params,
+        }
+        try:
             row = run_one_job(
                 {
                     "project_root": str(PROJECT_ROOT),
                     "build_dir": str(build_dir),
                     "run_dir": str(run_dir),
-                    "hits_csv": str(train_csv),
-                    "gt_csv": str(gt_csv),
+                    "hits_csv": dataset["train_csv"],
+                    "gt_csv": dataset["gt_csv"],
                     "n_layers": len(detector_layers),
                     "first_gap": first_gap,
                     "merge_penalty": merge_penalty,
                     "fork_penalty": fork_penalty,
                     "annealing_base": annealing_base,
                     "anneal_seed": int(ann_cfg.get("seed", 42)),
-                    "params": {
-                        "theta_max": theta_max,
-                        "angle_penalty": angle_penalty,
-                        "layer_radius_penalty": layer_radius_penalty,
-                        "length_penalty": length_penalty,
-                        "layer01_radial_tolerance": layer01_radial_tolerance,
-                    },
+                    "params": params,
                 }
             )
-            row["dataset_id"] = dataset_id
-            row["trial_number"] = trial.number
-
-            trial.set_user_attr("segment_precision", row["segment_precision"])
-            trial.set_user_attr("segment_recall", row["segment_recall"])
-            trial.set_user_attr("track_efficiency", row["track_efficiency"])
-            trial.set_user_attr("track_fake_rate", row["track_fake_rate"])
-            trial.set_user_attr("n_bifurcations", row["n_bifurcations"])
-            trial.set_user_attr("run_id", row["run_id"])
-
+            metric_value = float(row[args.objective_metric])
             pruned = False
             prune_reason = None
             if args.max_fake_rate is not None and row["track_fake_rate"] > args.max_fake_rate:
@@ -307,90 +438,227 @@ def main() -> int:
                 prune_reason = (
                     f"n_bifurcations {int(row['n_bifurcations'])} exceeded threshold {int(args.max_bifurcations)}"
                 )
-
+            row.update(base_row)
+            row["objective_metric"] = args.objective_metric
+            row["objective_metric_value"] = metric_value
+            row["objective_value"] = metric_value
             row["pruned"] = pruned
             row["prune_reason"] = prune_reason
-            dataset_rows.append(row)
+            row["state"] = "PRUNED" if pruned else "COMPLETE"
+            return row
+        except Exception as exc:
+            print(
+                (
+                    f"WARNING: trial {trial_number} dataset {dataset['dataset_id']} failed: "
+                    f"{exc}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            return {
+                **base_row,
+                "objective_metric": args.objective_metric,
+                "objective_metric_value": float("nan"),
+                "objective_value": float("nan"),
+                "pruned": False,
+                "prune_reason": None,
+                "state": "FAIL",
+                "error": str(exc),
+            }
 
-            if pruned:
-                raise optuna.TrialPruned(prune_reason)
+    def objective(trial: optuna.Trial) -> float:
+        params = {
+            "theta_max": trial.suggest_float("theta_max", theta_lo, theta_hi),
+            "angle_penalty": trial.suggest_float("angle_penalty", angle_lo, angle_hi),
+            "layer_radius_penalty": trial.suggest_float(
+                "layer_radius_penalty", layer_radius_lo, layer_radius_hi
+            ),
+            "length_penalty": trial.suggest_float("length_penalty", length_lo, length_hi),
+            "layer01_radial_tolerance": trial.suggest_float(
+                "layer01_radial_tolerance", tol_lo, tol_hi
+            ),
+        }
 
-            return float(row["track_efficiency"])
+        values_by_dataset: dict[str, float] = {}
+        dataset_rows: list[dict[str, Any]] = []
+        state = "COMPLETE"
+        prune_reason = None
 
-        sampler = optuna.samplers.TPESampler(seed=args.sampler_seed + d)
-        study = optuna.create_study(
-            study_name=f"{dataset_id}_study",
-            direction="maximize",
-            sampler=sampler,
-            pruner=optuna.pruners.MedianPruner(n_startup_trials=max(5, args.workers)),
+        with futures.ThreadPoolExecutor(max_workers=args.ensemble_workers) as executor:
+            submitted = {
+                executor.submit(evaluate_dataset, trial.number, params, dataset): dataset
+                for dataset in datasets
+            }
+            for completed_count, future in enumerate(futures.as_completed(submitted), start=1):
+                row = future.result()
+                dataset_rows.append(row)
+                values_by_dataset[row["dataset_id"]] = float(row["objective_metric_value"])
+
+                current_values = list(values_by_dataset.values())
+                current_objective = aggregate_values(
+                    current_values,
+                    statistic=args.ensemble_statistic,
+                    trim_fraction=args.trim_fraction,
+                )
+                if args.pruning and completed_count >= args.min_datasets_before_pruning:
+                    if math.isfinite(current_objective):
+                        trial.report(current_objective, step=completed_count)
+                    if trial.should_prune():
+                        state = "PRUNED"
+                        prune_reason = f"pruned after {completed_count} datasets"
+                        for pending in submitted:
+                            pending.cancel()
+                        break
+
+        values = [values_by_dataset.get(dataset["dataset_id"], float("nan")) for dataset in datasets]
+        objective_value = aggregate_values(
+            values,
+            statistic=args.ensemble_statistic,
+            trim_fraction=args.trim_fraction,
         )
-        study.enqueue_trial({
+        if not math.isfinite(objective_value):
+            objective_value = failed_objective(args.objective_direction)
+            state = "FAIL"
+
+        successful_count = int(len(finite_values(values)))
+
+        summary = {
+            "trial_number": trial.number,
+            **params,
+            **{f"metric_{dataset['dataset_id']}": values_by_dataset.get(dataset["dataset_id"], float("nan"))
+               for dataset in datasets},
+            **ensemble_summary(values),
+            "objective_value": objective_value,
+            "objective_metric": args.objective_metric,
+            "objective_statistic": args.ensemble_statistic,
+            "state": state,
+            "successful_datasets": successful_count,
+            "failed_datasets": len(datasets) - successful_count,
+            "prune_reason": prune_reason,
+        }
+
+        with rows_lock:
+            all_rows.extend(dataset_rows)
+            ensemble_rows.append(summary)
+
+        trial.set_user_attr("objective_metric", args.objective_metric)
+        trial.set_user_attr("objective_statistic", args.ensemble_statistic)
+        trial.set_user_attr("successful_datasets", successful_count)
+        trial.set_user_attr("failed_datasets", len(datasets) - successful_count)
+        for key in ("ensemble_mean", "ensemble_median", "ensemble_std", "ensemble_min", "ensemble_max"):
+            trial.set_user_attr(key, summary[key])
+
+        if state == "PRUNED":
+            raise optuna.TrialPruned(prune_reason)
+        return float(objective_value)
+
+    sampler = optuna.samplers.TPESampler(seed=args.sampler_seed)
+    pruner: optuna.pruners.BasePruner
+    if args.pruning:
+        pruner = optuna.pruners.MedianPruner(n_startup_trials=max(5, args.workers))
+    else:
+        pruner = optuna.pruners.NopPruner()
+
+    study = optuna.create_study(
+        study_name="ensemble_study",
+        direction=args.objective_direction,
+        sampler=sampler,
+        pruner=pruner,
+    )
+    study.enqueue_trial(
+        {
             "theta_max": 0.35,
             "angle_penalty": 3.3,
             "layer_radius_penalty": 3.1,
             "length_penalty": 0.57,
             "layer01_radial_tolerance": 0.23,
-        })
-        # Tighten around Run 2's sweet spot
-        study.enqueue_trial({
+        }
+    )
+    study.enqueue_trial(
+        {
             "theta_max": 0.35,
             "angle_penalty": 3.5,
             "layer_radius_penalty": 6.2,
             "length_penalty": 0.35,
             "layer01_radial_tolerance": 0.25,
-        })
-
-        # Push angle reward + layer_radius harder (try to complete more tracks)
-        study.enqueue_trial({
+        }
+    )
+    study.enqueue_trial(
+        {
             "theta_max": 0.40,
             "angle_penalty": 4.5,
             "layer_radius_penalty": 7.5,
             "length_penalty": 0.25,
             "layer01_radial_tolerance": 0.20,
-        })
-
-        # Loosen theta_max to let more segment pairs couple, moderate penalties
-        study.enqueue_trial({
+        }
+    )
+    study.enqueue_trial(
+        {
             "theta_max": 0.50,
             "angle_penalty": 3.0,
             "layer_radius_penalty": 5.0,
             "length_penalty": 0.40,
             "layer01_radial_tolerance": 0.30,
-        })
-
-        # Aggressive: strong alignment, tight angular gate, low length penalty
-        study.enqueue_trial({
+        }
+    )
+    study.enqueue_trial(
+        {
             "theta_max": 0.30,
             "angle_penalty": 5.0,
             "layer_radius_penalty": 8.0,
             "length_penalty": 0.15,
             "layer01_radial_tolerance": 0.18,
-        })
-        study.optimize(objective, n_trials=args.trials_per_dataset, n_jobs=args.workers)
-
-        dataset_df = pd.DataFrame(dataset_rows)
-        if dataset_df.empty or "track_efficiency" not in dataset_df.columns:
-            print(f"WARNING: no successful trials for {dataset_id}, skipping")
-            continue
-        dataset_df["objective_value"] = dataset_df["track_efficiency"]
-
-        dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
-        dataset_df.sort_values("objective_value", ascending=False).to_csv(dataset_csv, index=False)
-        all_rows.extend(dataset_rows)
+        }
+    )
+    study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
 
     summary_df = pd.DataFrame(all_rows)
-    if summary_df.empty or "track_efficiency" not in summary_df.columns:
-        print("ERROR: no successful trials across all datasets")
+    if summary_df.empty:
+        print("ERROR: no dataset evaluations were recorded")
         return 1
-    summary_df["objective_value"] = summary_df["track_efficiency"]
+    if "objective_value" not in summary_df.columns:
+        summary_df["objective_value"] = summary_df["objective_metric_value"]
 
+    ascending = args.objective_direction == "minimize"
     summary_csv = sweep_root / "summary_trials.csv"
-    summary_df.sort_values(["dataset_id", "objective_value"], ascending=[True, False]).to_csv(summary_csv, index=False)
+    summary_df.sort_values(["dataset_id", "objective_value"], ascending=[True, ascending]).to_csv(
+        summary_csv, index=False
+    )
 
-    completed_df = summary_df[~summary_df["pruned"].astype(bool)].copy()
-    best_df = completed_df.sort_values("objective_value", ascending=False).groupby("dataset_id", as_index=False).first()
+    for dataset in datasets:
+        dataset_id = dataset["dataset_id"]
+        dataset_df = summary_df[summary_df["dataset_id"] == dataset_id].copy()
+        dataset_csv = sweep_root / f"{dataset_id}_trials.csv"
+        dataset_df.sort_values("objective_value", ascending=ascending).to_csv(dataset_csv, index=False)
+
+    completed_df = summary_df[summary_df["state"] == "COMPLETE"].copy()
+    if completed_df.empty:
+        best_df = pd.DataFrame()
+    else:
+        best_df = (
+            completed_df.sort_values("objective_value", ascending=ascending)
+            .groupby("dataset_id", as_index=False)
+            .first()
+        )
     best_csv = sweep_root / "best_per_dataset.csv"
     best_df.to_csv(best_csv, index=False)
+
+    ensemble_df = pd.DataFrame(ensemble_rows)
+    ensemble_csv = sweep_root / "ensemble_trials.csv"
+    if not ensemble_df.empty:
+        ensemble_df.sort_values("objective_value", ascending=ascending).to_csv(ensemble_csv, index=False)
+    else:
+        ensemble_df.to_csv(ensemble_csv, index=False)
+
+    if ensemble_df.empty:
+        ensemble_best_df = pd.DataFrame()
+    else:
+        complete_ensemble_df = ensemble_df[ensemble_df["state"] == "COMPLETE"].copy()
+        if complete_ensemble_df.empty:
+            complete_ensemble_df = ensemble_df.copy()
+        ensemble_best_df = complete_ensemble_df.sort_values("objective_value", ascending=ascending).head(1)
+    ensemble_best_csv = sweep_root / "ensemble_best.csv"
+    ensemble_best_df.to_csv(ensemble_best_csv, index=False)
 
     with (sweep_root / "manifest.json").open("w", encoding="utf-8") as fh:
         json.dump(
@@ -398,10 +666,13 @@ def main() -> int:
                 "created_at": stamp,
                 "datasets": args.datasets,
                 "workers": args.workers,
+                "ensemble_workers": args.ensemble_workers,
                 "trials_per_dataset": args.trials_per_dataset,
-                "total_trials": int(args.datasets * args.trials_per_dataset),
+                "total_trials": int(total_trials),
                 "summary_csv": str(summary_csv),
                 "best_csv": str(best_csv),
+                "ensemble_trials_csv": str(ensemble_csv),
+                "ensemble_best_csv": str(ensemble_best_csv),
                 "metrics_tracked": [
                     "segment_precision",
                     "segment_recall",
@@ -409,7 +680,14 @@ def main() -> int:
                     "track_fake_rate",
                     "n_bifurcations",
                 ],
-                "objective": "maximize_track_efficiency",
+                "objective": f"{args.objective_direction}_{args.ensemble_statistic}_{args.objective_metric}",
+                "objective_metric": args.objective_metric,
+                "objective_direction": args.objective_direction,
+                "ensemble_statistic": args.ensemble_statistic,
+                "ensemble_size": args.datasets,
+                "trim_fraction": args.trim_fraction,
+                "pruning": args.pruning,
+                "min_datasets_before_pruning": args.min_datasets_before_pruning,
                 "prune_on_fake_rate": args.max_fake_rate,
                 "prune_on_bifurcations": args.max_bifurcations,
             },
@@ -419,6 +697,8 @@ def main() -> int:
 
     print(f"Wrote: {summary_csv}")
     print(f"Wrote: {best_csv}")
+    print(f"Wrote: {ensemble_csv}")
+    print(f"Wrote: {ensemble_best_csv}")
     return 0
 
 
