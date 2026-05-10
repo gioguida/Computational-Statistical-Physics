@@ -221,6 +221,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ensemble-workers", type=int, default=8)
     parser.add_argument("--seeds-start", type=int, default=1000)
     parser.add_argument("--output-root", default="results/sweeps")
+    parser.add_argument("--runs-root-base", default=None)
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
     parser.add_argument("--angle-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer-radius-penalty", nargs="+", type=float, required=True)
@@ -349,8 +350,11 @@ def main() -> int:
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
     datasets_root = sweep_root / "datasets"
-    runs_root = sweep_root / "runs"
     datasets_root.mkdir(parents=True, exist_ok=True)
+    if args.runs_root_base is not None:
+        runs_root = (Path(args.runs_root_base).expanduser().resolve() / stamp / "runs").resolve()
+    else:
+        runs_root = sweep_root / "runs"
     runs_root.mkdir(parents=True, exist_ok=True)
 
     total_trials = int(args.trials_per_dataset)
