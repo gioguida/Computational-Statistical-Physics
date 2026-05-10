@@ -22,6 +22,11 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
+RUNS_ROOT_BASE_ARGS=()
+if [[ -n "${SCRATCH:-}" ]]; then
+  RUNS_ROOT_BASE_ARGS+=(--runs-root-base "$SCRATCH/CSP/sweeps")
+fi
+
 # Build once
 cmake -S . -B build
 cmake --build build -j 128
@@ -33,6 +38,7 @@ cmake --build build -j 128
 # Pruning is off by default; add --pruning to enable Optuna median pruning.
 uv run scripts/run_dataset_sweep.py \
   --config scripts/config.yaml \
+  "${RUNS_ROOT_BASE_ARGS[@]}" \
   --datasets 16 \
   --trials-per-dataset 64 \
   --workers 8 \
