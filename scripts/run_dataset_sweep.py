@@ -172,6 +172,12 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             str(ann["checkpoint_every_steps"]),
             "--seed",
             str(job["anneal_seed"]),
+            "--curvature-bonus",
+            str(p["curvature_bonus"]),
+            "--curvature-penalty",
+            str(p["curvature_penalty"]),
+            "--curvature-tolerance",
+            str(p["curvature_tolerance"]),
         ],
         cwd=project_root,
     )
@@ -227,6 +233,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layer-radius-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
+    parser.add_argument("--curvature-bonus", nargs="+", type=float, required=True)
+    parser.add_argument("--curvature-penalty", nargs="+", type=float, required=True)
+    parser.add_argument("--curvature-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--sampler-seed", type=int, default=42)
     parser.add_argument("--max-fake-rate", type=float, default=None)
     parser.add_argument("--max-bifurcations", type=int, default=None)
@@ -346,6 +355,9 @@ def main() -> int:
     layer_radius_lo, layer_radius_hi = _bounds(args.layer_radius_penalty, "layer_radius_penalty")
     length_lo, length_hi = _bounds(args.length_penalty, "length_penalty")
     tol_lo, tol_hi = _bounds(args.layer01_radial_tolerance, "layer01_radial_tolerance")
+    curv_bonus_lo, curv_bonus_hi = _bounds(args.curvature_bonus, "curvature_bonus")
+    curv_penalty_lo, curv_penalty_hi = _bounds(args.curvature_penalty, "curvature_penalty")
+    curv_tol_lo, curv_tol_hi = _bounds(args.curvature_tolerance, "curvature_tolerance")
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
@@ -481,6 +493,13 @@ def main() -> int:
             "layer01_radial_tolerance": trial.suggest_float(
                 "layer01_radial_tolerance", tol_lo, tol_hi
             ),
+            "curvature_bonus": trial.suggest_float("curvature_bonus", curv_bonus_lo, curv_bonus_hi),
+            "curvature_penalty": trial.suggest_float(
+                "curvature_penalty", curv_penalty_lo, curv_penalty_hi
+            ),
+            "curvature_tolerance": trial.suggest_float(
+                "curvature_tolerance", curv_tol_lo, curv_tol_hi
+            ),
         }
 
         values_by_dataset: dict[str, float] = {}
@@ -576,6 +595,9 @@ def main() -> int:
             "layer_radius_penalty": 3.1,
             "length_penalty": 0.57,
             "layer01_radial_tolerance": 0.23,
+            "curvature_bonus": 1.0,
+            "curvature_penalty": 0.5,
+            "curvature_tolerance": 0.08,
         }
     )
     study.enqueue_trial(
@@ -585,6 +607,9 @@ def main() -> int:
             "layer_radius_penalty": 6.2,
             "length_penalty": 0.35,
             "layer01_radial_tolerance": 0.25,
+            "curvature_bonus": 1.5,
+            "curvature_penalty": 0.5,
+            "curvature_tolerance": 0.08,
         }
     )
     study.enqueue_trial(
@@ -594,6 +619,9 @@ def main() -> int:
             "layer_radius_penalty": 7.5,
             "length_penalty": 0.25,
             "layer01_radial_tolerance": 0.20,
+            "curvature_bonus": 1.0,
+            "curvature_penalty": 0.3,
+            "curvature_tolerance": 0.10,
         }
     )
     study.enqueue_trial(
@@ -603,6 +631,9 @@ def main() -> int:
             "layer_radius_penalty": 5.0,
             "length_penalty": 0.40,
             "layer01_radial_tolerance": 0.30,
+            "curvature_bonus": 0.8,
+            "curvature_penalty": 0.4,
+            "curvature_tolerance": 0.06,
         }
     )
     study.enqueue_trial(
@@ -612,6 +643,9 @@ def main() -> int:
             "layer_radius_penalty": 8.0,
             "length_penalty": 0.15,
             "layer01_radial_tolerance": 0.18,
+            "curvature_bonus": 1.2,
+            "curvature_penalty": 0.6,
+            "curvature_tolerance": 0.07,
         }
     )
     study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
