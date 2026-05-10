@@ -5,6 +5,8 @@
 
 #include <random>
 #include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 struct MetropolisStepStats {
     int proposed = 0;
@@ -22,21 +24,32 @@ class Spinglass {
         std::vector<int> configuration_;
         std::mt19937 rng_;
 
+        // Curvature triplet parameters
+        double curvature_bonus_;
+        double curvature_penalty_;
+        double curvature_tolerance_;
+        bool use_curvature_;
+
+        // Segment geometry indexed by segment id (= spin index)
+        std::vector<double> dx_;
+        std::vector<double> dy_;
+        std::vector<int> hit_a_;
+        std::vector<int> hit_b_;
+
+        // hit_id -> segment indices with hit_a == hit_id (segment starts at that hit)
+        std::unordered_map<int, std::vector<int>> feeds_into_;
+        // hit_id -> segment indices with hit_b == hit_id (segment ends at that hit)
+        std::unordered_map<int, std::vector<int>> fed_by_;
+
+        double triplet_energy(int j, int i, int k) const;
+        double compute_triplet_delta(int site) const;
+
     public:
-        Spinglass(int N, interaction_mat_t J, std::vector<double> h, int seed):
-         N_(N), J_(J), h_(N_), configuration_(N_), rng_(seed) {
-            if (h.size() != static_cast<std::size_t>(N_)) {
-                throw std::invalid_argument("External field size does not match number of spins");
-            }
-            
-            // Initialize from the configured RNG so repeated runs with the same seed are reproducible.
-            std::bernoulli_distribution bernoulli(0.5);
-
-            for(int i = 0; i < N_; ++i)
-                configuration_[i] = 2*bernoulli(rng_) - 1;
-
-            h_ = h;
-        };
+        Spinglass(int N, interaction_mat_t J, std::vector<double> h, int seed,
+                  const std::vector<Segment>& segments = {},
+                  double curvature_bonus = 0.0,
+                  double curvature_penalty = 0.0,
+                  double curvature_tolerance = 0.08);
 
         void set_T(double const& T);
 

@@ -19,7 +19,11 @@ int count_selected_spins(const std::vector<int>& state) {
 
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
-    int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps) {
+    int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps,
+    const std::vector<Segment>& segments,
+    double curvature_bonus,
+    double curvature_penalty,
+    double curvature_tolerance) {
     std::cout << "--- Starting simulation ---" << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -31,7 +35,7 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
     std::vector<double> spins(N);
 
     // instantiate ising model
-    Spinglass model(N, J, h, seed);
+    Spinglass model(N, J, h, seed, segments, curvature_bonus, curvature_penalty, curvature_tolerance);
     model.set_T(T_max); 
     model.compute_initial_energy();
 

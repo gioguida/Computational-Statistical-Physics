@@ -2,7 +2,7 @@
 
 ## Overview
 
-Track reconstruction in high-energy physics (e.g. at CERN) is a large combinatorial problem. This project maps a simplified 2D version of the task onto an Ising-like spin-glass model. Potential track segments between detector layers are treated as binary variables (spins). By designing a Hamiltonian that rewards smooth trajectories and strongly penalizes bifurcations, track finding becomes an energy minimization problem solved via simulated annealing.
+Track reconstruction in high-energy physics (e.g. at CERN) is a large combinatorial problem. This project maps a simplified 2D version of the task onto a binary quadratic model over segment-selection variables. Potential track segments between detector layers are treated as binary variables. By designing a Hamiltonian that rewards smooth trajectories and strongly penalizes bifurcations, track finding becomes an energy minimization problem solved via simulated annealing.
 
 ## Repository Structure
 
@@ -51,11 +51,11 @@ The pipeline runs in four sequential stages, all controlled from `scripts/config
 - Outputs `segments.csv`, `J_edges.csv`, and `interaction_meta.json` inside the run folder.
 
 ### 3. Simulated Annealing (C++)
-- Initialises an Ising model where each spin s_i ∈ {−1, +1} represents whether segment i is selected.
+- Initialises a binary model where each segment variable x_i ∈ {0, 1} represents whether segment i is selected.
 - Uses the Metropolis-Hastings algorithm with the Hamiltonian:
 
   ```
-  H = −∑_ij J_ij s_i s_j − ∑_i h_i s_i
+  H = −∑_ij J_ij x_i x_j − ∑_i h_i x_i
   ```
 
 - Temperature is cooled from T_max = 5.0 down to T_min = 0.05 in steps of 0.05, with 50 equilibration sweeps per temperature.
@@ -146,7 +146,7 @@ Each run creates a timestamped subfolder under `results/runs/`, containing:
 | `segments.csv` | All candidate track segments |
 | `J_edges.csv` | Sparse interaction matrix (upper triangle) |
 | `interaction_meta.json` | Parameters used for the interaction stage |
-| `final_state.csv` | Spin configuration after annealing (selected segments) |
+| `final_state.csv` | Binary selection state after annealing (selected segments) |
 | `energy_trace.csv` | Hamiltonian trace recorded during annealing (`step,temperature,energy,n_selected`) |
 | `annealing_meta.json` | Parameters and convergence info for the annealing stage |
 

@@ -121,7 +121,7 @@ def main() -> int:
         training_csv=training_csv,
         ground_truth_csv=ground_truth_csv,
         detector_radii=detector_radii,
-        out_path=plot_dir / "hit_map.png",
+        out_path=plot_dir / "hit_map.pdf",
     )
 
     print("Generating track comparison...")

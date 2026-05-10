@@ -152,6 +152,12 @@ def run_annealing_stage(
             str(int(ann_cfg.get("checkpoint_every_steps", 10))),
             "--seed",
             str(int(ann_cfg["seed"])),
+            "--curvature-bonus",
+            str(float(ann_cfg.get("curvature_bonus", 0.0))),
+            "--curvature-penalty",
+            str(float(ann_cfg.get("curvature_penalty", 0.0))),
+            "--curvature-tolerance",
+            str(float(ann_cfg.get("curvature_tolerance", 0.08))),
         ],
         cwd=project_root,
     )

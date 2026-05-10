@@ -31,6 +31,9 @@ struct Config {
 	int log_every_steps = 1;
 	int checkpoint_every_steps = 10;
 	int seed = 123;
+	double curvature_bonus = 0.0;
+	double curvature_penalty = 0.0;
+	double curvature_tolerance = 0.08;
 };
 
 std::string require_value(int argc, char** argv, int& i) {
@@ -78,6 +81,12 @@ Config parse_args(int argc, char** argv) {
 			cfg.checkpoint_every_steps = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--seed") {
 			cfg.seed = std::stoi(require_value(argc, argv, i));
+		} else if (arg == "--curvature-bonus") {
+			cfg.curvature_bonus = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--curvature-penalty") {
+			cfg.curvature_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--curvature-tolerance") {
+			cfg.curvature_tolerance = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--help" || arg == "-h") {
 				std::cout
 					<< "Usage: run_annealing --segments-csv <path> --edges-csv <path> --out-dir <path> [options]\n"
@@ -325,14 +334,10 @@ interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N, 
 		}
 
 		// The interaction stage writes binary coefficients q_ij for
-		// E_binary = -sum q_ij x_i x_j, where x_i=(s_i+1)/2.
-		// Expanding into H = -sum J_ij s_i s_j - sum h_i s_i gives
-		// J_ij=q_ij/4 and a q_ij/4 field contribution to both endpoints.
-		const double Jij = qij / 4.0;
+		// E_binary = -sum q_ij x_i x_j, with x_i in {0,1}.
+		const double Jij = qij;
 		J[i].push_back(std::make_pair(j, Jij));
 		J[j].push_back(std::make_pair(i, Jij));
-		h[i] += Jij;
-		h[j] += Jij;
 	}
 
 	return J;
@@ -461,6 +466,9 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
 		<< "  \"checkpoint_every_steps\": " << cfg.checkpoint_every_steps << ",\n"
 		<< "  \"seed\": " << cfg.seed << ",\n"
+		<< "  \"curvature_bonus\": " << cfg.curvature_bonus << ",\n"
+		<< "  \"curvature_penalty\": " << cfg.curvature_penalty << ",\n"
+		<< "  \"curvature_tolerance\": " << cfg.curvature_tolerance << ",\n"
 		<< "  \"best_energy\": " << best_energy << ",\n"
 		<< "  \"n_trace_samples\": " << n_trace_samples << ",\n"
 		<< "  \"n_annealing_trace_samples\": " << n_annealing_trace_samples << ",\n"
@@ -498,7 +506,7 @@ int main(int argc, char** argv) {
 			}
 			for (int i = 0; i < N; ++i) {
 				const double seg_len = std::sqrt(segments[i].dx * segments[i].dx + segments[i].dy * segments[i].dy);
-				h[i] -= 0.5 * cfg.length_penalty * seg_len;
+				h[i] -= cfg.length_penalty * seg_len;
 
 				const bool is_layer_0_to_1 = (segments[i].layer_a == 0 && segments[i].layer_b == 1);
 				if (is_layer_0_to_1 && cfg.layer_radius_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
@@ -515,7 +523,7 @@ int main(int argc, char** argv) {
 				}
 			}
 
-		// Run annealing on the Ising expansion of the binary segment-selection objective.
+		// Run annealing on the binary segment-selection objective.
 		AnnealingResult result = main_simulation(N,
 												 J,
 												 h,
@@ -526,7 +534,11 @@ int main(int argc, char** argv) {
 												 cfg.eq_sweeps,
 												 cfg.seed,
 												 cfg.log_every_steps,
-												 cfg.checkpoint_every_steps);
+												 cfg.checkpoint_every_steps,
+												 segments,
+												 cfg.curvature_bonus,
+												 cfg.curvature_penalty,
+												 cfg.curvature_tolerance);
 
 		const std::filesystem::path out_dir(cfg.out_dir);
 		std::filesystem::create_directories(out_dir);
