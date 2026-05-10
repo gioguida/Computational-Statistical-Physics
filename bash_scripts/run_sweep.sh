@@ -2,9 +2,10 @@
 #SBATCH --job-name=sweep
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=128
-#SBATCH --time=08:00:00
+#SBATCH --cpus-per-task=64
+#SBATCH --time=04:00:00
 #SBATCH --constraint=EPYC_7763
+#SBATCH --mem-per-cpu=512
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -24,7 +25,7 @@ export NUMEXPR_NUM_THREADS=1
 
 # Build once
 cmake -S . -B build
-cmake --build build -j 128
+cmake --build build -j 64
 
 # Dataset-ensemble Bayesian optimization sweep.
 # --workers controls concurrent Optuna trials.
@@ -36,7 +37,7 @@ uv run scripts/run_dataset_sweep.py \
   --datasets 16 \
   --trials-per-dataset 64 \
   --workers 8 \
-  --ensemble-workers 16 \
+  --ensemble-workers 8 \
   --seeds-start 1000 \
   --objective-metric track_efficiency \
   --objective-direction maximize \
