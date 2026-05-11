@@ -31,13 +31,17 @@ interaction:
   fork_penalty: 10.0
   angle_penalty: 2.0
   layer01_radial_penalty: 5.0
+  curvature_bonus: 1.0
+  curvature_penalty: 0.5
+  curvature_tolerance: 0.08
 
 annealing:
+  cooling_schedule: linear  # geometric | linear
   t_min: 0.001
   t_max: 4.0
-  n_steps: 3000
+  n_steps: 600
   checkpoint_every_steps: 10
-  toll: 0.000001
+  toll: 1e-08
   length_penalty: 0.5
   layer01_radial_tolerance: 0.23
   eq_sweeps: 100
@@ -45,7 +49,7 @@ annealing:
   seed: 42
   curvature_bonus: 1.0
   curvature_penalty: 0.5
-  curvature_tolerance: 0.08
+  curvature_tolerance: 0.10
 
 plotting:
   create_annealing_animation: false

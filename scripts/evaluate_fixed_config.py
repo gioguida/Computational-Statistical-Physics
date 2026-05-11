@@ -243,6 +243,7 @@ def build_fixed_params(
         "eq_sweeps": int(ann_cfg.get("eq_sweeps", 100)),
         "log_every_steps": int(ann_cfg.get("log_every_steps", 100)),
         "checkpoint_every_steps": int(ann_cfg.get("checkpoint_every_steps", 10)),
+        "cooling_schedule": str(ann_cfg.get("cooling_schedule", "geometric")),
         "anneal_seed_base": base_seed,
         "first_gap": first_gap,
     }
@@ -522,6 +523,8 @@ def main() -> int:
                     str(fixed_params["log_every_steps"]),
                     "--checkpoint-every-steps",
                     str(fixed_params["checkpoint_every_steps"]),
+                    "--cooling-schedule",
+                    str(fixed_params["cooling_schedule"]),
                     "--seed",
                     str(anneal_seed),
                 ],

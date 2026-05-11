@@ -20,6 +20,7 @@ int count_selected_spins(const std::vector<int>& state) {
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
     int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps,
+    const std::string& cooling_schedule,
     const std::vector<Segment>& segments,
     double curvature_bonus,
     double curvature_penalty,
@@ -67,6 +68,7 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
     int t = 0;
     double dev = toll + 1;
     const bool single_step = (N_steps <= 1);
+    const bool use_geometric = (cooling_schedule == "geometric");
     const bool valid_geometric_bounds = (T_min > 0.0 && T_max > 0.0 && N_steps > 1);
     const double alpha = valid_geometric_bounds
         ? std::pow(T_min / T_max, 1.0 / static_cast<double>(N_steps - 1))
@@ -77,10 +79,9 @@ AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> 
         double T = T_max;
         if (single_step) {
             T = T_max;
-        } else if (valid_geometric_bounds) {
+        } else if (use_geometric && valid_geometric_bounds) {
             T = T_max * std::pow(alpha, static_cast<double>(t));
         } else {
-            // Fallback if geometric cooling is not well-defined.
             const double frac = static_cast<double>(t) / static_cast<double>(N_steps - 1);
             T = T_max + (T_min - T_max) * frac;
         }

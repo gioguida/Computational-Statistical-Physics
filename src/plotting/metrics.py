@@ -108,11 +108,15 @@ def _compute_bifurcation_count(active_segments: pd.DataFrame) -> int:
     return bifurcations
 
 
-def _compute_energy_decomposition(edges: pd.DataFrame, spins: pd.Series) -> tuple[float, float, float]:
+def _compute_energy_decomposition(
+    edges: pd.DataFrame,
+    spins: pd.Series,
+    h_values: pd.Series | None = None,
+) -> tuple[float, float, float, float]:
     spin_map = spins.to_dict()
     h_alignment = 0.0
     h_competing = 0.0
-    h_total = 0.0
+    h_pairwise_total = 0.0
 
     for _, row in edges.iterrows():
         i = int(row["i"])
@@ -121,13 +125,21 @@ def _compute_energy_decomposition(edges: pd.DataFrame, spins: pd.Series) -> tupl
         if i not in spin_map or j not in spin_map:
             raise ValueError(f"Missing spin value for edge ({i}, {j})")
         contrib = -jij * float(spin_map[i]) * float(spin_map[j])
-        h_total += contrib
+        h_pairwise_total += contrib
         if jij > 0:
             h_alignment += contrib
         elif jij < 0:
             h_competing += contrib
 
-    return h_total, h_alignment, h_competing
+    h_field = 0.0
+    if h_values is not None:
+        h_map = h_values.to_dict()
+        for seg_id, hi in h_map.items():
+            si = float(spin_map.get(seg_id, 0))
+            h_field += -float(hi) * si
+
+    h_total = h_pairwise_total + h_field
+    return h_total, h_alignment, h_competing, h_field
 
 
 def _plot_cv_vs_t(trace: pd.DataFrame, out_path: Path) -> float:
@@ -206,6 +218,7 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
     segments_csv = interaction_dir / "segments.csv"
     edges_csv = interaction_dir / "J_edges.csv"
     final_state_csv = annealing_dir / "final_state.csv"
+    h_values_csv = annealing_dir / "h_values.csv"
     trace_csv = annealing_dir / "annealing_trace.csv"
     meta_json = annealing_dir / "annealing_meta.json"
 
@@ -221,6 +234,11 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
     trace = _load_trace(trace_csv)
     edges = pd.read_csv(edges_csv)
     meta = _load_meta(meta_json)
+
+    h_values_series: pd.Series | None = None
+    if h_values_csv.exists():
+        h_df = pd.read_csv(h_values_csv)
+        h_values_series = h_df.set_index("seg_id")["h_value"]
 
     # Segment-level metrics
     segment_truth = _build_segment_truth(segments, truth)
@@ -246,9 +264,10 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
     n_bifurcations = _compute_bifurcation_count(active_segments)
 
     # Energy decomposition
-    h_final, h_alignment, h_competing = _compute_energy_decomposition(
+    h_final, h_alignment, h_competing, h_field = _compute_energy_decomposition(
         edges=edges,
         spins=final_state.set_index("seg_id")["spin"],
+        h_values=h_values_series,
     )
 
     # Annealing quality indicators
@@ -275,6 +294,7 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
         "H_final": float(h_final),
         "H_alignment": float(h_alignment),
         "H_competing": float(h_competing),
+        "H_field": float(h_field),
         "freeze_temperature": float(freeze_temperature),
         "length_penalty": float(meta.get("length_penalty", 0.0)),
         "merge_penalty": float(cfg["merge_penalty"]),

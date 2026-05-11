@@ -6,6 +6,7 @@
 #include<chrono>
 #include<filesystem>
 #include<vector>
+#include<string>
 #include"spinglass.hpp"
 
 struct AnnealingTraceSample {
@@ -48,6 +49,7 @@ struct AnnealingResult {
 AnnealingResult main_simulation(int N, interaction_mat_t J, std::vector<double> h,
     double T_min, double T_max, int N_steps, double toll,
     int N_sweeps, int seed, int log_every_steps, int checkpoint_every_steps,
+    const std::string& cooling_schedule = "geometric",
     const std::vector<Segment>& segments = {},
     double curvature_bonus = 0.0,
     double curvature_penalty = 0.0,

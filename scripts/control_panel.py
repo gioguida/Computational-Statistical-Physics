@@ -83,6 +83,9 @@ def run_interaction_stage(
     merge_penalty = float(inter_cfg["merge_penalty"])
     fork_penalty = float(inter_cfg["fork_penalty"])
     angle_penalty = float(inter_cfg["angle_penalty"])
+    curvature_bonus = float(inter_cfg.get("curvature_bonus", 0.0))
+    curvature_penalty = float(inter_cfg.get("curvature_penalty", 0.0))
+    curvature_tolerance = float(inter_cfg.get("curvature_tolerance", 0.1))
 
     run_cmd(
         [
@@ -99,6 +102,12 @@ def run_interaction_stage(
             str(fork_penalty),
             "--angle-penalty",
             str(angle_penalty),
+            "--curvature-bonus",
+            str(curvature_bonus),
+            "--curvature-penalty",
+            str(curvature_penalty),
+            "--curvature-tolerance",
+            str(curvature_tolerance),
         ],
         cwd=project_root,
     )
@@ -150,6 +159,8 @@ def run_annealing_stage(
             str(int(ann_cfg.get("log_every_steps", 1))),
             "--checkpoint-every-steps",
             str(int(ann_cfg.get("checkpoint_every_steps", 10))),
+            "--cooling-schedule",
+            str(ann_cfg.get("cooling_schedule", "geometric")),
             "--seed",
             str(int(ann_cfg["seed"])),
             "--curvature-bonus",

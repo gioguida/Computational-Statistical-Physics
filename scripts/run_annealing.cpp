@@ -2,11 +2,13 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <cmath>
 #include <limits>
 #include <map>
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -34,6 +36,7 @@ struct Config {
 	double curvature_bonus = 0.0;
 	double curvature_penalty = 0.0;
 	double curvature_tolerance = 0.08;
+	std::string cooling_schedule = "geometric";
 };
 
 std::string require_value(int argc, char** argv, int& i) {
@@ -62,7 +65,7 @@ Config parse_args(int argc, char** argv) {
 		} else if (arg == "--t-max") {
 			cfg.t_max = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--n-steps") {
-			cfg.n_steps = std::stod(require_value(argc, argv, i));
+			cfg.n_steps = std::stoi(require_value(argc, argv, i));
 		} else if (arg == "--toll") {
 			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--length-penalty") {
@@ -87,6 +90,8 @@ Config parse_args(int argc, char** argv) {
 			cfg.curvature_penalty = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--curvature-tolerance") {
 			cfg.curvature_tolerance = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--cooling-schedule") {
+			cfg.cooling_schedule = require_value(argc, argv, i);
 		} else if (arg == "--help" || arg == "-h") {
 				std::cout
 					<< "Usage: run_annealing --segments-csv <path> --edges-csv <path> --out-dir <path> [options]\n"
@@ -102,8 +107,9 @@ Config parse_args(int argc, char** argv) {
 					<< "  --first-gap <float>  Radius gap between the first two detector layers (default: 0)\n"
 					<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
 					<< "  --log-every-steps <int>  Log every N annealing temperature steps (default: 1)\n"
-				<< "  --checkpoint-every-steps <int>  Save state every N annealing steps (default: 10)\n"
-				<< "  --seed <int>         RNG seed (default: 123)\n";
+					<< "  --checkpoint-every-steps <int>  Save state every N annealing steps (default: 10)\n"
+					<< "  --seed <int>         RNG seed (default: 123)\n"
+					<< "  --cooling-schedule <geometric|linear>  Cooling schedule (default: geometric)\n";
 			std::exit(0);
 		} else {
 			throw std::runtime_error("Unknown argument: " + arg);
@@ -151,6 +157,15 @@ Config parse_args(int argc, char** argv) {
 	}
 	if (cfg.checkpoint_every_steps <= 0) {
 		throw std::runtime_error("Checkpoint step interval must be positive");
+	}
+	std::transform(
+		cfg.cooling_schedule.begin(),
+		cfg.cooling_schedule.end(),
+		cfg.cooling_schedule.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); }
+	);
+	if (cfg.cooling_schedule != "geometric" && cfg.cooling_schedule != "linear") {
+		throw std::runtime_error("Invalid cooling schedule: use 'geometric' or 'linear'");
 	}
 
 	return cfg;
@@ -343,6 +358,19 @@ interaction_mat_t read_edges_csv(const std::filesystem::path& edges_csv, int N, 
 	return J;
 }
 
+void write_h_values_csv(const std::filesystem::path& out_path, const std::vector<double>& h) {
+	std::ofstream out(out_path);
+	if (!out.is_open()) {
+		throw std::runtime_error("Could not open output file: " + out_path.string());
+	}
+
+	out << "seg_id,h_value\n";
+	out << std::setprecision(17);
+	for (int i = 0; i < static_cast<int>(h.size()); ++i) {
+		out << i << ',' << h[i] << '\n';
+	}
+}
+
 void write_final_state_csv(const std::filesystem::path& out_path, const std::vector<int>& state) {
 	std::ofstream out(out_path);
 	if (!out.is_open()) {
@@ -469,6 +497,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"curvature_bonus\": " << cfg.curvature_bonus << ",\n"
 		<< "  \"curvature_penalty\": " << cfg.curvature_penalty << ",\n"
 		<< "  \"curvature_tolerance\": " << cfg.curvature_tolerance << ",\n"
+		<< "  \"cooling_schedule\": \"" << cfg.cooling_schedule << "\",\n"
 		<< "  \"best_energy\": " << best_energy << ",\n"
 		<< "  \"n_trace_samples\": " << n_trace_samples << ",\n"
 		<< "  \"n_annealing_trace_samples\": " << n_annealing_trace_samples << ",\n"
@@ -535,6 +564,7 @@ int main(int argc, char** argv) {
 												 cfg.seed,
 												 cfg.log_every_steps,
 												 cfg.checkpoint_every_steps,
+												 cfg.cooling_schedule,
 												 segments,
 												 cfg.curvature_bonus,
 												 cfg.curvature_penalty,
@@ -544,6 +574,7 @@ int main(int argc, char** argv) {
 		std::filesystem::create_directories(out_dir);
 
 		// Persist final spin assignment and run metadata for downstream analysis.
+		write_h_values_csv(out_dir / "h_values.csv", h);
 		write_final_state_csv(out_dir / "final_state.csv", result.state);
 		write_lowest_energy_state_csv(out_dir / "lowest_energy_state.csv", result.best_state);
 		write_energy_trace_csv(out_dir / "energy_trace.csv", result.trace);

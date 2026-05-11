@@ -19,6 +19,9 @@ struct Config {
 	double merge_penalty = 10.0;
 	double fork_penalty = 10.0;
 	double angle_penalty = 10.0;
+	double curvature_bonus = 0.0;
+	double curvature_penalty = 0.0;
+	double curvature_tolerance = 0.1;  // radians
 };
 
 std::string require_value(int argc, char** argv, int& i) {
@@ -47,6 +50,12 @@ Config parse_args(int argc, char** argv) {
 			cfg.fork_penalty = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--angle-penalty") {
 			cfg.angle_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--curvature-bonus") {
+			cfg.curvature_bonus = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--curvature-penalty") {
+			cfg.curvature_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--curvature-tolerance") {
+			cfg.curvature_tolerance = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--help" || arg == "-h") {
 			std::cout
 				<< "Usage: run_interaction --hits-csv <path> --out-dir <path> [options]\n"
@@ -160,6 +169,9 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"merge_penalty\": " << cfg.merge_penalty << ",\n"
 		<< "  \"fork_penalty\": " << cfg.fork_penalty << ",\n"
 		<< "  \"angle_penalty\": " << cfg.angle_penalty << ",\n"
+		<< "  \"curvature_bonus\": " << cfg.curvature_bonus << ",\n"
+		<< "  \"curvature_penalty\": " << cfg.curvature_penalty << ",\n"
+		<< "  \"curvature_tolerance\": " << cfg.curvature_tolerance << ",\n"
 		<< "  \"n_hits\": " << n_hits << ",\n"
 		<< "  \"n_layers\": " << n_layers << ",\n"
 		<< "  \"n_segments\": " << n_segments << ",\n"
@@ -178,7 +190,8 @@ int main(int argc, char** argv) {
 		hit_vec_t hits = read_hits_from_csv(cfg.hits_csv);
 		hit_group_t grouped = group_hits_by_layer(hits);
 		seg_vec_t segments = create_segments(grouped);
-		interaction_mat_t J = interaction_matrix(segments, cfg.theta_max, cfg.merge_penalty, cfg.fork_penalty, cfg.angle_penalty);
+		interaction_mat_t J = interaction_matrix(segments, cfg.theta_max, cfg.merge_penalty, cfg.fork_penalty, cfg.angle_penalty,
+												 cfg.curvature_bonus, cfg.curvature_penalty, cfg.curvature_tolerance);
 
 		int n_edges = 0;
 		for (int i = 0; i < static_cast<int>(J.size()); ++i) {

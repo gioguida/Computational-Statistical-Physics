@@ -146,11 +146,14 @@ seg_vec_t create_segments(hit_group_t grouped) {
 }
 
 interaction_mat_t interaction_matrix(
-    seg_vec_t segments, 
-    double theta_max, 
-    double merge_penalty, 
+    seg_vec_t segments,
+    double theta_max,
+    double merge_penalty,
     double fork_penalty,
-    double angle_penalty
+    double angle_penalty,
+    double curvature_bonus,
+    double curvature_penalty,
+    double curvature_tolerance
     ) {
     int N_segments = segments.size();
     interaction_mat_t J(N_segments);
@@ -158,7 +161,7 @@ interaction_mat_t interaction_matrix(
     for(int i = 0; i < N_segments; ++i) {
         std::vector<std::pair<int, double>> J_i;
         for(int j = i + 1; j < N_segments; ++j) {
- 
+
             if( // potentially aligned segments
                 ((segments[i].layer_b == segments[j].layer_a) &&
                     (segments[i].hit_b == segments[j].hit_a)) ||
@@ -166,10 +169,32 @@ interaction_mat_t interaction_matrix(
                     (segments[j].hit_b == segments[i].hit_a))
             ) {
                 double reward = seg_alignment(segments[i], segments[j]);
-                // check if the angle is below the threshold
-                double score = reward > std::cos(theta_max) ? reward : -angle_penalty;
-                J[i].emplace_back(std::pair<int,double>{j, score});
-                J[j].emplace_back(std::pair<int,double>{i, score});
+                if (reward > std::cos(theta_max)) {
+                    // Determine ordering: angle_a is the earlier segment's angle.
+                    double angle_a, angle_b;
+                    if (segments[i].layer_b == segments[j].layer_a) {
+                        angle_a = segments[i].angle;
+                        angle_b = segments[j].angle;
+                    } else {
+                        angle_a = segments[j].angle;
+                        angle_b = segments[i].angle;
+                    }
+                    double delta_theta = angle_b - angle_a;
+                    while (delta_theta >  M_PI) delta_theta -= 2.0 * M_PI;
+                    while (delta_theta < -M_PI) delta_theta += 2.0 * M_PI;
+
+                    double score = reward;
+                    if (std::fabs(delta_theta) < curvature_tolerance) {
+                        score += curvature_bonus;
+                    } else {
+                        score -= curvature_penalty;
+                    }
+                    J[i].emplace_back(std::pair<int,double>{j, score});
+                    J[j].emplace_back(std::pair<int,double>{i, score});
+                } else {
+                    J[i].emplace_back(std::pair<int,double>{j, -angle_penalty});
+                    J[j].emplace_back(std::pair<int,double>{i, -angle_penalty});
+                }
 
             } else if( // merged segments
                 (segments[i].layer_b == segments[j].layer_b) &&
