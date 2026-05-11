@@ -280,7 +280,7 @@ def visualize_metrics(cfg: dict[str, Any]) -> dict[str, Any]:
         "merge_penalty": float(cfg["merge_penalty"]),
         "fork_penalty": float(cfg["fork_penalty"]),
         "angle_penalty": float(cfg["angle_penalty"]),
-        "layer_radius_penalty": float(meta.get("layer_radius_penalty", 0.0)),
+        "layer01_radial_penalty": float(meta.get("layer01_radial_penalty", 0.0)),
     }
 
     metrics_path = annealing_dir / "metrics.json"

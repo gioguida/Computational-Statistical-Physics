@@ -30,7 +30,7 @@ interaction:
   merge_penalty: 10.0
   fork_penalty: 10.0
   angle_penalty: 2.0
-  layer_radius_penalty: 5.0
+  layer01_radial_penalty: 5.0
 
 annealing:
   t_min: 0.001

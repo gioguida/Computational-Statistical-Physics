@@ -24,7 +24,7 @@ struct Config {
 	int n_steps = 1000;
 	double toll = 1e-3;
 	double length_penalty = 0.0;
-	double layer_radius_penalty = 0.0;
+	double layer01_radial_penalty = 0.0;
 	double layer01_radial_tolerance = 0.0;
 	double first_gap = 0.0;
 	int eq_sweeps = 50;
@@ -67,8 +67,8 @@ Config parse_args(int argc, char** argv) {
 			cfg.toll = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--length-penalty") {
 			cfg.length_penalty = std::stod(require_value(argc, argv, i));
-		} else if (arg == "--layer-radius-penalty") {
-			cfg.layer_radius_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--layer01-radial-penalty") {
+			cfg.layer01_radial_penalty = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--layer01-radial-tolerance") {
 			cfg.layer01_radial_tolerance = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--first-gap") {
@@ -97,7 +97,7 @@ Config parse_args(int argc, char** argv) {
 					<< "  --t-step <float>     Temperature step (default: 0.05)\n"
 					<< "  --toll <float>       Energy convergence tolerance (default: 1e-3)\n"
 					<< "  --length-penalty <float>  Binary penalty per unit selected segment length (default: 0)\n"
-					<< "  --layer-radius-penalty <float>  Penalty for layer 0->1 segments that violate radial orientation (default: 0)\n"
+					<< "  --layer01-radial-penalty <float>  Penalty for layer 0->1 segments that violate radial orientation (default: 0)\n"
 					<< "  --layer01-radial-tolerance <float>  Max allowed angular deviation from layer-0 radial direction in radians (default: 0)\n"
 					<< "  --first-gap <float>  Radius gap between the first two detector layers (default: 0)\n"
 					<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
@@ -131,8 +131,8 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.length_penalty < 0.0) {
 		throw std::runtime_error("Invalid length penalty: require length_penalty >= 0");
 	}
-	if (cfg.layer_radius_penalty < 0.0) {
-		throw std::runtime_error("Invalid layer radius penalty: require layer_radius_penalty >= 0");
+	if (cfg.layer01_radial_penalty < 0.0) {
+		throw std::runtime_error("Invalid layer radius penalty: require layer01_radial_penalty >= 0");
 	}
 	if (cfg.layer01_radial_tolerance < 0.0) {
 		throw std::runtime_error("Invalid layer-0->1 radial tolerance: require layer01_radial_tolerance >= 0");
@@ -140,7 +140,7 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.first_gap < 0.0) {
 		throw std::runtime_error("Invalid first gap: require first_gap >= 0");
 	}
-	if (cfg.layer_radius_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0 && cfg.hits_csv.empty()) {
+	if (cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0 && cfg.hits_csv.empty()) {
 		throw std::runtime_error("Missing required argument --hits-csv when radial layer penalty is enabled");
 	}
 	if (cfg.eq_sweeps <= 0) {
@@ -459,7 +459,7 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"n_steps\": " << cfg.n_steps << ",\n"
 		<< "  \"toll\": " << cfg.toll << ",\n"
 		<< "  \"length_penalty\": " << cfg.length_penalty << ",\n"
-		<< "  \"layer_radius_penalty\": " << cfg.layer_radius_penalty << ",\n"
+		<< "  \"layer01_radial_penalty\": " << cfg.layer01_radial_penalty << ",\n"
 		<< "  \"layer01_radial_tolerance\": " << cfg.layer01_radial_tolerance << ",\n"
 		<< "  \"first_gap\": " << cfg.first_gap << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
@@ -501,7 +501,7 @@ int main(int argc, char** argv) {
 			std::vector<double> h(N, 0.0);
 			interaction_mat_t J = read_edges_csv(cfg.edges_csv, N, h);
 			std::map<int, std::pair<double, double>> layer0_hit_positions;
-			if (cfg.layer_radius_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
+			if (cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
 				layer0_hit_positions = read_layer0_hit_positions_csv(cfg.hits_csv);
 			}
 			for (int i = 0; i < N; ++i) {
@@ -509,7 +509,7 @@ int main(int argc, char** argv) {
 				h[i] -= cfg.length_penalty * seg_len;
 
 				const bool is_layer_0_to_1 = (segments[i].layer_a == 0 && segments[i].layer_b == 1);
-				if (is_layer_0_to_1 && cfg.layer_radius_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
+				if (is_layer_0_to_1 && cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
 					const auto hit_it = layer0_hit_positions.find(segments[i].hit_a);
 					if (hit_it == layer0_hit_positions.end()) {
 						throw std::runtime_error("Layer-0 hit id missing from hits CSV: " + std::to_string(segments[i].hit_a));
@@ -518,7 +518,7 @@ int main(int argc, char** argv) {
 					const double radial_angle = std::atan2(hit_it->second.second, hit_it->second.first);
 					const double segment_angle = std::atan2(segments[i].dy, segments[i].dx);
 					if (angular_distance(segment_angle, radial_angle) > cfg.layer01_radial_tolerance) {
-						h[i] -= cfg.layer_radius_penalty;
+						h[i] -= cfg.layer01_radial_penalty;
 					}
 				}
 			}

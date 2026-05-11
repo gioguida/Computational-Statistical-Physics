@@ -158,8 +158,8 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             str(ann["toll"]),
             "--length-penalty",
             str(p["length_penalty"]),
-            "--layer-radius-penalty",
-            str(p["layer_radius_penalty"]),
+            "--layer01-radial-penalty",
+            str(p["layer01_radial_penalty"]),
             "--layer01-radial-tolerance",
             str(p["layer01_radial_tolerance"]),
             "--first-gap",
@@ -230,7 +230,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runs-root-base", default=None)
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
     parser.add_argument("--angle-penalty", nargs="+", type=float, required=True)
-    parser.add_argument("--layer-radius-penalty", nargs="+", type=float, required=True)
+    parser.add_argument("--layer01-radial-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-bonus", nargs="+", type=float, required=True)
@@ -352,7 +352,7 @@ def main() -> int:
 
     theta_lo, theta_hi = _bounds(args.theta_max, "theta_max")
     angle_lo, angle_hi = _bounds(args.angle_penalty, "angle_penalty")
-    layer_radius_lo, layer_radius_hi = _bounds(args.layer_radius_penalty, "layer_radius_penalty")
+    layer_radius_lo, layer_radius_hi = _bounds(args.layer01_radial_penalty, "layer01_radial_penalty")
     length_lo, length_hi = _bounds(args.length_penalty, "length_penalty")
     tol_lo, tol_hi = _bounds(args.layer01_radial_tolerance, "layer01_radial_tolerance")
     curv_bonus_lo, curv_bonus_hi = _bounds(args.curvature_bonus, "curvature_bonus")
@@ -486,8 +486,8 @@ def main() -> int:
         params = {
             "theta_max": trial.suggest_float("theta_max", theta_lo, theta_hi),
             "angle_penalty": trial.suggest_float("angle_penalty", angle_lo, angle_hi),
-            "layer_radius_penalty": trial.suggest_float(
-                "layer_radius_penalty", layer_radius_lo, layer_radius_hi
+            "layer01_radial_penalty": trial.suggest_float(
+                "layer01_radial_penalty", layer_radius_lo, layer_radius_hi
             ),
             "length_penalty": trial.suggest_float("length_penalty", length_lo, length_hi),
             "layer01_radial_tolerance": trial.suggest_float(
@@ -592,7 +592,7 @@ def main() -> int:
         {
             "theta_max": 0.35,
             "angle_penalty": 3.3,
-            "layer_radius_penalty": 3.1,
+            "layer01_radial_penalty": 3.1,
             "length_penalty": 0.57,
             "layer01_radial_tolerance": 0.23,
             "curvature_bonus": 1.0,
@@ -604,7 +604,7 @@ def main() -> int:
         {
             "theta_max": 0.35,
             "angle_penalty": 3.5,
-            "layer_radius_penalty": 6.2,
+            "layer01_radial_penalty": 6.2,
             "length_penalty": 0.35,
             "layer01_radial_tolerance": 0.25,
             "curvature_bonus": 1.5,
@@ -616,7 +616,7 @@ def main() -> int:
         {
             "theta_max": 0.40,
             "angle_penalty": 4.5,
-            "layer_radius_penalty": 7.5,
+            "layer01_radial_penalty": 7.5,
             "length_penalty": 0.25,
             "layer01_radial_tolerance": 0.20,
             "curvature_bonus": 1.0,
@@ -628,7 +628,7 @@ def main() -> int:
         {
             "theta_max": 0.50,
             "angle_penalty": 3.0,
-            "layer_radius_penalty": 5.0,
+            "layer01_radial_penalty": 5.0,
             "length_penalty": 0.40,
             "layer01_radial_tolerance": 0.30,
             "curvature_bonus": 0.8,
@@ -640,7 +640,7 @@ def main() -> int:
         {
             "theta_max": 0.30,
             "angle_penalty": 5.0,
-            "layer_radius_penalty": 8.0,
+            "layer01_radial_penalty": 8.0,
             "length_penalty": 0.15,
             "layer01_radial_tolerance": 0.18,
             "curvature_bonus": 1.2,

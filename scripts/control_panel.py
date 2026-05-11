@@ -112,7 +112,7 @@ def run_annealing_stage(
     out_dir: Path,
     ann_cfg: dict[str, Any],
     first_gap: float,
-    layer_radius_penalty: float,
+    layer01_radial_penalty: float,
 ) -> None:
     segments_csv = interaction_dir / "segments.csv"
     edges_csv = interaction_dir / "J_edges.csv"
@@ -138,8 +138,8 @@ def run_annealing_stage(
             str(float(ann_cfg.get("toll", 1e-3))),
             "--length-penalty",
             str(float(ann_cfg.get("length_penalty", 0.0))),
-            "--layer-radius-penalty",
-            str(float(layer_radius_penalty)),
+            "--layer01-radial-penalty",
+            str(float(layer01_radial_penalty)),
             "--layer01-radial-tolerance",
             str(float(ann_cfg.get("layer01_radial_tolerance", 0.0))),
             "--first-gap",
@@ -185,7 +185,7 @@ def main() -> int:
     if not isinstance(detector_layers, list) or len(detector_layers) < 2:
         raise ValueError("generation.data.detector_layers must contain at least two radii")
     first_gap = abs(float(detector_layers[1]) - float(detector_layers[0]))
-    layer_radius_penalty = float(ann_cfg.get("layer_radius_penalty", inter_cfg.get("layer_radius_penalty", 0.0)))
+    layer01_radial_penalty = float(ann_cfg.get("layer01_radial_penalty", inter_cfg.get("layer01_radial_penalty", 0.0)))
 
     build_dir = (project_root / str(build_cfg.get("build_dir", "build"))).resolve()
     results_root = (project_root / str(paths_cfg.get("results_root", "results/runs"))).resolve()
@@ -240,7 +240,7 @@ def main() -> int:
             annealing_dir,
             ann_cfg,
             first_gap,
-            layer_radius_penalty,
+            layer01_radial_penalty,
         )
 
     print(f"Run id: {run_id}")
