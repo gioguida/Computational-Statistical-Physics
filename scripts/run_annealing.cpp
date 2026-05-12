@@ -28,6 +28,9 @@ struct Config {
 	double length_penalty = 0.0;
 	double layer01_radial_penalty = 0.0;
 	double layer01_radial_tolerance = 0.0;
+	double chain_bonus = 0.0;
+	double radial_penalty = 0.0;
+	double radial_tolerance = 0.3;
 	double first_gap = 0.0;
 	int eq_sweeps = 50;
 	int log_every_steps = 1;
@@ -74,6 +77,12 @@ Config parse_args(int argc, char** argv) {
 			cfg.layer01_radial_penalty = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--layer01-radial-tolerance") {
 			cfg.layer01_radial_tolerance = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--chain-bonus") {
+			cfg.chain_bonus = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--radial-penalty") {
+			cfg.radial_penalty = std::stod(require_value(argc, argv, i));
+		} else if (arg == "--radial-tolerance") {
+			cfg.radial_tolerance = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--first-gap") {
 			cfg.first_gap = std::stod(require_value(argc, argv, i));
 		} else if (arg == "--eq-sweeps") {
@@ -104,6 +113,9 @@ Config parse_args(int argc, char** argv) {
 					<< "  --length-penalty <float>  Binary penalty per unit selected segment length (default: 0)\n"
 					<< "  --layer01-radial-penalty <float>  Penalty for layer 0->1 segments that violate radial orientation (default: 0)\n"
 					<< "  --layer01-radial-tolerance <float>  Max allowed angular deviation from layer-0 radial direction in radians (default: 0)\n"
+					<< "  --chain-bonus <float>  Bonus for segments with aligned inward and outward partners (default: 0)\n"
+					<< "  --radial-penalty <float>  Linear penalty scale for non-radial segment direction (default: 0)\n"
+					<< "  --radial-tolerance <float>  Allowed radial angular deviation in radians (default: 0.3)\n"
 					<< "  --first-gap <float>  Radius gap between the first two detector layers (default: 0)\n"
 					<< "  --eq-sweeps <int>    Equilibration sweeps per temperature (default: 50)\n"
 					<< "  --log-every-steps <int>  Log every N annealing temperature steps (default: 1)\n"
@@ -143,11 +155,24 @@ Config parse_args(int argc, char** argv) {
 	if (cfg.layer01_radial_tolerance < 0.0) {
 		throw std::runtime_error("Invalid layer-0->1 radial tolerance: require layer01_radial_tolerance >= 0");
 	}
+	if (cfg.chain_bonus < 0.0) {
+		throw std::runtime_error("Invalid chain bonus: require chain_bonus >= 0");
+	}
+	if (cfg.radial_penalty < 0.0) {
+		throw std::runtime_error("Invalid radial penalty: require radial_penalty >= 0");
+	}
+	if (cfg.radial_tolerance < 0.0) {
+		throw std::runtime_error("Invalid radial tolerance: require radial_tolerance >= 0");
+	}
 	if (cfg.first_gap < 0.0) {
 		throw std::runtime_error("Invalid first gap: require first_gap >= 0");
 	}
-	if (cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0 && cfg.hits_csv.empty()) {
-		throw std::runtime_error("Missing required argument --hits-csv when radial layer penalty is enabled");
+	if (
+		((cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) ||
+		 (cfg.radial_penalty > 0.0 && cfg.radial_tolerance > 0.0)) &&
+		cfg.hits_csv.empty()
+	) {
+		throw std::runtime_error("Missing required argument --hits-csv when radial penalties are enabled");
 	}
 	if (cfg.eq_sweeps <= 0) {
 		throw std::runtime_error("Sweep count must be positive");
@@ -254,7 +279,7 @@ std::vector<Segment> read_segment_info_csv(const std::filesystem::path& segments
 	return segments;
 }
 
-std::map<int, std::pair<double, double>> read_layer0_hit_positions_csv(const std::filesystem::path& hits_csv) {
+std::map<int, std::pair<double, double>> read_hit_positions_csv(const std::filesystem::path& hits_csv) {
 	if (!std::filesystem::exists(hits_csv)) {
 		throw std::runtime_error("Hits CSV does not exist: " + hits_csv.string());
 	}
@@ -267,7 +292,7 @@ std::map<int, std::pair<double, double>> read_layer0_hit_positions_csv(const std
 	std::string line;
 	std::getline(file, line);  // header
 
-	std::map<int, std::pair<double, double>> layer0_hit_positions;
+	std::map<int, std::pair<double, double>> hit_positions;
 	while (std::getline(file, line)) {
 		if (line.empty()) {
 			continue;
@@ -285,16 +310,12 @@ std::map<int, std::pair<double, double>> read_layer0_hit_positions_csv(const std
 		}
 
 		const int hit_id = std::stoi(tokens[0]);
-		const int layer_id = std::stoi(tokens[1]);
-		if (layer_id != 0) {
-			continue;
-		}
 		const double x = std::stod(tokens[3]);
 		const double y = std::stod(tokens[4]);
-		layer0_hit_positions.emplace(hit_id, std::make_pair(x, y));
+		hit_positions.emplace(hit_id, std::make_pair(x, y));
 	}
 
-	return layer0_hit_positions;
+	return hit_positions;
 }
 
 double angular_distance(double a, double b) {
@@ -489,6 +510,9 @@ void write_meta_json(const std::filesystem::path& out_path,
 		<< "  \"length_penalty\": " << cfg.length_penalty << ",\n"
 		<< "  \"layer01_radial_penalty\": " << cfg.layer01_radial_penalty << ",\n"
 		<< "  \"layer01_radial_tolerance\": " << cfg.layer01_radial_tolerance << ",\n"
+		<< "  \"chain_bonus\": " << cfg.chain_bonus << ",\n"
+		<< "  \"radial_penalty\": " << cfg.radial_penalty << ",\n"
+		<< "  \"radial_tolerance\": " << cfg.radial_tolerance << ",\n"
 		<< "  \"first_gap\": " << cfg.first_gap << ",\n"
 		<< "  \"eq_sweeps\": " << cfg.eq_sweeps << ",\n"
 		<< "  \"log_every_steps\": " << cfg.log_every_steps << ",\n"
@@ -529,9 +553,12 @@ int main(int argc, char** argv) {
 			const int N = static_cast<int>(segments.size());
 			std::vector<double> h(N, 0.0);
 			interaction_mat_t J = read_edges_csv(cfg.edges_csv, N, h);
-			std::map<int, std::pair<double, double>> layer0_hit_positions;
-			if (cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
-				layer0_hit_positions = read_layer0_hit_positions_csv(cfg.hits_csv);
+			std::map<int, std::pair<double, double>> hit_positions;
+			if (
+				(cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) ||
+				(cfg.radial_penalty > 0.0 && cfg.radial_tolerance > 0.0)
+			) {
+				hit_positions = read_hit_positions_csv(cfg.hits_csv);
 			}
 			for (int i = 0; i < N; ++i) {
 				const double seg_len = std::sqrt(segments[i].dx * segments[i].dx + segments[i].dy * segments[i].dy);
@@ -539,8 +566,8 @@ int main(int argc, char** argv) {
 
 				const bool is_layer_0_to_1 = (segments[i].layer_a == 0 && segments[i].layer_b == 1);
 				if (is_layer_0_to_1 && cfg.layer01_radial_penalty > 0.0 && cfg.layer01_radial_tolerance > 0.0) {
-					const auto hit_it = layer0_hit_positions.find(segments[i].hit_a);
-					if (hit_it == layer0_hit_positions.end()) {
+					const auto hit_it = hit_positions.find(segments[i].hit_a);
+					if (hit_it == hit_positions.end()) {
 						throw std::runtime_error("Layer-0 hit id missing from hits CSV: " + std::to_string(segments[i].hit_a));
 					}
 
@@ -548,6 +575,54 @@ int main(int argc, char** argv) {
 					const double segment_angle = std::atan2(segments[i].dy, segments[i].dx);
 					if (angular_distance(segment_angle, radial_angle) > cfg.layer01_radial_tolerance) {
 						h[i] -= cfg.layer01_radial_penalty;
+					}
+				}
+			}
+			if (cfg.chain_bonus > 0.0) {
+				for (int i = 0; i < N; ++i) {
+					bool has_inward = false;
+					bool has_outward = false;
+					for (const auto& [j, Jij] : J[i]) {
+						if (Jij <= 0.0) {
+							continue;
+						}
+						if (segments[j].layer_b == segments[i].layer_a &&
+							segments[j].hit_b == segments[i].hit_a) {
+							has_inward = true;
+						}
+						if (segments[j].layer_a == segments[i].layer_b &&
+							segments[j].hit_a == segments[i].hit_b) {
+							has_outward = true;
+						}
+						if (has_inward && has_outward) {
+							break;
+						}
+					}
+					if (has_inward && has_outward) {
+						h[i] += cfg.chain_bonus;
+					}
+				}
+			}
+			if (cfg.radial_penalty > 0.0 && cfg.radial_tolerance > 0.0) {
+				for (int i = 0; i < N; ++i) {
+					const auto hit_a_it = hit_positions.find(segments[i].hit_a);
+					if (hit_a_it == hit_positions.end()) {
+						throw std::runtime_error("Segment hit_a missing from hits CSV: " + std::to_string(segments[i].hit_a));
+					}
+					const auto hit_b_it = hit_positions.find(segments[i].hit_b);
+					if (hit_b_it == hit_positions.end()) {
+						throw std::runtime_error("Segment hit_b missing from hits CSV: " + std::to_string(segments[i].hit_b));
+					}
+
+					const double seg_angle = segments[i].angle;
+					const double rad_a = std::atan2(hit_a_it->second.second, hit_a_it->second.first);
+					const double dev_a = angular_distance(seg_angle, rad_a);
+					const double rad_b = std::atan2(hit_b_it->second.second, hit_b_it->second.first);
+					const double dev_b = angular_distance(seg_angle, rad_b);
+					const double dev = std::min(dev_a, dev_b);
+
+					if (dev > cfg.radial_tolerance) {
+						h[i] -= cfg.radial_penalty * (dev - cfg.radial_tolerance);
 					}
 				}
 			}

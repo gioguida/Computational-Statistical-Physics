@@ -159,9 +159,15 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "--length-penalty",
             str(p["length_penalty"]),
             "--layer01-radial-penalty",
-            str(p["layer01_radial_penalty"]),
+            str(job["layer01_radial_penalty"]),
             "--layer01-radial-tolerance",
             str(p["layer01_radial_tolerance"]),
+            "--chain-bonus",
+            str(p["chain_bonus"]),
+            "--radial-penalty",
+            str(p["radial_penalty"]),
+            "--radial-tolerance",
+            str(p["radial_tolerance"]),
             "--first-gap",
             str(job["first_gap"]),
             "--eq-sweeps",
@@ -232,12 +238,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runs-root-base", default=None)
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
     parser.add_argument("--angle-penalty", nargs="+", type=float, required=True)
-    parser.add_argument("--layer01-radial-penalty", nargs="+", type=float, default=[0.0, 15.0])
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-bonus", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-tolerance", nargs="+", type=float, required=True)
+    parser.add_argument("--chain-bonus", nargs="+", type=float, required=True)
+    parser.add_argument("--radial-penalty", nargs="+", type=float, required=True)
+    parser.add_argument("--radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--sampler-seed", type=int, default=42)
     parser.add_argument("--max-fake-rate", type=float, default=None)
     parser.add_argument("--max-bifurcations", type=int, default=None)
@@ -341,6 +349,9 @@ def main() -> int:
 
     merge_penalty = float(inter_cfg.get("merge_penalty", 10.0))
     fork_penalty = float(inter_cfg.get("fork_penalty", 10.0))
+    layer01_radial_penalty = float(
+        ann_cfg.get("layer01_radial_penalty", inter_cfg.get("layer01_radial_penalty", 0.0))
+    )
 
     annealing_base = {
         "t_min": float(ann_cfg.get("t_min", 1e-3)),
@@ -355,12 +366,14 @@ def main() -> int:
 
     theta_lo, theta_hi = _bounds(args.theta_max, "theta_max")
     angle_lo, angle_hi = _bounds(args.angle_penalty, "angle_penalty")
-    layer_radius_lo, layer_radius_hi = _bounds(args.layer01_radial_penalty, "layer01_radial_penalty")
     length_lo, length_hi = _bounds(args.length_penalty, "length_penalty")
     tol_lo, tol_hi = _bounds(args.layer01_radial_tolerance, "layer01_radial_tolerance")
     curv_bonus_lo, curv_bonus_hi = _bounds(args.curvature_bonus, "curvature_bonus")
     curv_penalty_lo, curv_penalty_hi = _bounds(args.curvature_penalty, "curvature_penalty")
     curv_tol_lo, curv_tol_hi = _bounds(args.curvature_tolerance, "curvature_tolerance")
+    chain_bonus_lo, chain_bonus_hi = _bounds(args.chain_bonus, "chain_bonus")
+    radial_penalty_lo, radial_penalty_hi = _bounds(args.radial_penalty, "radial_penalty")
+    radial_tol_lo, radial_tol_hi = _bounds(args.radial_tolerance, "radial_tolerance")
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
@@ -435,6 +448,7 @@ def main() -> int:
                     "first_gap": first_gap,
                     "merge_penalty": merge_penalty,
                     "fork_penalty": fork_penalty,
+                    "layer01_radial_penalty": layer01_radial_penalty,
                     "annealing_base": annealing_base,
                     "anneal_seed": int(ann_cfg.get("seed", 42)),
                     "params": params,
@@ -489,9 +503,6 @@ def main() -> int:
         params = {
             "theta_max": trial.suggest_float("theta_max", theta_lo, theta_hi),
             "angle_penalty": trial.suggest_float("angle_penalty", angle_lo, angle_hi),
-            "layer01_radial_penalty": trial.suggest_float(
-                "layer01_radial_penalty", layer_radius_lo, layer_radius_hi
-            ),
             "length_penalty": trial.suggest_float("length_penalty", length_lo, length_hi),
             "layer01_radial_tolerance": trial.suggest_float(
                 "layer01_radial_tolerance", tol_lo, tol_hi
@@ -503,6 +514,9 @@ def main() -> int:
             "curvature_tolerance": trial.suggest_float(
                 "curvature_tolerance", curv_tol_lo, curv_tol_hi
             ),
+            "chain_bonus": trial.suggest_float("chain_bonus", chain_bonus_lo, chain_bonus_hi),
+            "radial_penalty": trial.suggest_float("radial_penalty", radial_penalty_lo, radial_penalty_hi),
+            "radial_tolerance": trial.suggest_float("radial_tolerance", radial_tol_lo, radial_tol_hi),
         }
 
         values_by_dataset: dict[str, float] = {}
@@ -591,26 +605,24 @@ def main() -> int:
         sampler=sampler,
         pruner=pruner,
     )
-    # S0 — no-noise winner (baseline)
-    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021})
-
-    # S1 — same structure, penalties scaled up ~1.5x
-    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 3.5, "length_penalty": 0.180, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.700, "curvature_penalty": 0.800, "curvature_tolerance": 0.021})
-
-    # S2 — tighter theta + stronger penalties (noise-hostile)
-    study.enqueue_trial({"theta_max": 0.50, "angle_penalty": 4.0, "length_penalty": 0.200, "layer01_radial_tolerance": 0.25, "curvature_bonus": 0.900, "curvature_penalty": 0.900, "curvature_tolerance": 0.015})
-
-    # S3 — wide theta but heavy curvature filtering (let geometry in, filter by physics)
-    study.enqueue_trial({"theta_max": 0.75, "angle_penalty": 3.0, "length_penalty": 0.100, "layer01_radial_tolerance": 0.30, "curvature_bonus": 1.100, "curvature_penalty": 0.700, "curvature_tolerance": 0.018})
-
-    # S4 — trial 43 regime scaled for noise
-    study.enqueue_trial({"theta_max": 0.667, "angle_penalty": 2.8, "length_penalty": 0.150, "layer01_radial_tolerance": 0.250, "curvature_bonus": 0.600, "curvature_penalty": 0.650, "curvature_tolerance": 0.030})
-
-    # S5 — aggressive: tight everything
-    study.enqueue_trial({"theta_max": 0.45, "angle_penalty": 4.5, "length_penalty": 0.220, "layer01_radial_tolerance": 0.18, "curvature_bonus": 1.0, "curvature_penalty": 0.950, "curvature_tolerance": 0.012})
-
-    # S6 — moderate with strong curvature bonus (reward real tracks loudly)
-    study.enqueue_trial({"theta_max": 0.60, "angle_penalty": 3.2, "length_penalty": 0.130, "layer01_radial_tolerance": 0.28, "curvature_bonus": 1.15, "curvature_penalty": 0.550, "curvature_tolerance": 0.020})
+    # S0 — no-noise winner + moderate new terms
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021, "chain_bonus": 1.5, "radial_penalty": 2.0, "radial_tolerance": 0.25})
+    # S1 — strong chain bonus (target the chaining failure mode)
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021, "chain_bonus": 2.5, "radial_penalty": 1.5, "radial_tolerance": 0.25})
+    # S2 — strong radial penalty (target cross-track segments directly)
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021, "chain_bonus": 1.0, "radial_penalty": 4.0, "radial_tolerance": 0.20})
+    # S3 — tight radial tolerance + high bonus (both terms aggressive)
+    study.enqueue_trial({"theta_max": 0.60, "angle_penalty": 3.0, "length_penalty": 0.150, "layer01_radial_tolerance": 0.28, "curvature_bonus": 0.60, "curvature_penalty": 0.65, "curvature_tolerance": 0.020, "chain_bonus": 2.5, "radial_penalty": 3.5, "radial_tolerance": 0.15})
+    # S4 — wider theta with strong filtering (let more in, filter harder)
+    study.enqueue_trial({"theta_max": 0.75, "angle_penalty": 2.5, "length_penalty": 0.100, "layer01_radial_tolerance": 0.30, "curvature_bonus": 0.50, "curvature_penalty": 0.50, "curvature_tolerance": 0.025, "chain_bonus": 2.0, "radial_penalty": 3.0, "radial_tolerance": 0.30})
+    # S5 — moderate all-round
+    study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 3.2, "length_penalty": 0.140, "layer01_radial_tolerance": 0.28, "curvature_bonus": 0.55, "curvature_penalty": 0.60, "curvature_tolerance": 0.018, "chain_bonus": 1.8, "radial_penalty": 2.5, "radial_tolerance": 0.25})
+    # S6 — loose radial tolerance (test if gentle nudge suffices)
+    study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 2.9, "length_penalty": 0.130, "layer01_radial_tolerance": 0.29, "curvature_bonus": 0.57, "curvature_penalty": 0.55, "curvature_tolerance": 0.021, "chain_bonus": 1.2, "radial_penalty": 1.0, "radial_tolerance": 0.38})
+    # S7 — chain bonus only (isolate contribution of each new term)
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021, "chain_bonus": 2.0, "radial_penalty": 0.0, "radial_tolerance": 0.30})
+    # S8 — radial penalty only (isolate contribution of each new term)
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021, "chain_bonus": 0.0, "radial_penalty": 3.0, "radial_tolerance": 0.22})
     
     study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
 
