@@ -591,30 +591,26 @@ def main() -> int:
         sampler=sampler,
         pruner=pruner,
     )
-    # S0 — ensemble winner (direct seed)
-    study.enqueue_trial({"theta_max": 0.6445, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021})
+    # S0 — no-noise winner (baseline)
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021})
 
-    # S1 — trial 52 (near-twin of ensemble winner, also 1.0 on its dataset)
-    study.enqueue_trial({"theta_max": 0.640, "angle_penalty": 2.869, "length_penalty": 0.131, "layer01_radial_tolerance": 0.285, "curvature_bonus": 0.552, "curvature_penalty": 0.562, "curvature_tolerance": 0.022})
+    # S1 — same structure, penalties scaled up ~1.5x
+    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 3.5, "length_penalty": 0.180, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.700, "curvature_penalty": 0.800, "curvature_tolerance": 0.021})
 
-    # S2 — trial 43 regime (lower angle_penalty, balanced curvature)
-    study.enqueue_trial({"theta_max": 0.667, "angle_penalty": 2.165, "length_penalty": 0.116, "layer01_radial_tolerance": 0.250, "curvature_bonus": 0.454, "curvature_penalty": 0.454, "curvature_tolerance": 0.036})
+    # S2 — tighter theta + stronger penalties (noise-hostile)
+    study.enqueue_trial({"theta_max": 0.50, "angle_penalty": 4.0, "length_penalty": 0.200, "layer01_radial_tolerance": 0.25, "curvature_bonus": 0.900, "curvature_penalty": 0.900, "curvature_tolerance": 0.015})
 
-    # S3 — trial 45 regime (wider theta, mid-range angle_penalty)
-    study.enqueue_trial({"theta_max": 0.755, "angle_penalty": 2.0, "length_penalty": 0.100, "layer01_radial_tolerance": 0.283, "curvature_bonus": 0.462, "curvature_penalty": 0.456, "curvature_tolerance": 0.033})
+    # S3 — wide theta but heavy curvature filtering (let geometry in, filter by physics)
+    study.enqueue_trial({"theta_max": 0.75, "angle_penalty": 3.0, "length_penalty": 0.100, "layer01_radial_tolerance": 0.30, "curvature_bonus": 1.100, "curvature_penalty": 0.700, "curvature_tolerance": 0.018})
 
-    # S4 — push curvature_penalty higher (strongest positive correlation r=+0.29)
-    study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 2.8, "length_penalty": 0.130, "layer01_radial_tolerance": 0.30, "curvature_bonus": 0.50, "curvature_penalty": 0.75, "curvature_tolerance": 0.020})
+    # S4 — trial 43 regime scaled for noise
+    study.enqueue_trial({"theta_max": 0.667, "angle_penalty": 2.8, "length_penalty": 0.150, "layer01_radial_tolerance": 0.250, "curvature_bonus": 0.600, "curvature_penalty": 0.650, "curvature_tolerance": 0.030})
 
-    # S5 — push l01_radial_tolerance higher (second strongest signal r=+0.21)
-    study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 2.9, "length_penalty": 0.130, "layer01_radial_tolerance": 0.34, "curvature_bonus": 0.55, "curvature_penalty": 0.55, "curvature_tolerance": 0.020})
+    # S5 — aggressive: tight everything
+    study.enqueue_trial({"theta_max": 0.45, "angle_penalty": 4.5, "length_penalty": 0.220, "layer01_radial_tolerance": 0.18, "curvature_bonus": 1.0, "curvature_penalty": 0.950, "curvature_tolerance": 0.012})
 
-    # S6 — tighter curvature_tolerance (explore stricter curvature gate)
-    study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 3.0, "length_penalty": 0.140, "layer01_radial_tolerance": 0.28, "curvature_bonus": 0.60, "curvature_penalty": 0.60, "curvature_tolerance": 0.012})
-
-    # S7 — lower length_penalty + wider theta (different tradeoff point)
-    study.enqueue_trial({"theta_max": 0.73, "angle_penalty": 2.5, "length_penalty": 0.060, "layer01_radial_tolerance": 0.29, "curvature_bonus": 0.40, "curvature_penalty": 0.55, "curvature_tolerance": 0.028})
-    study.enqueue_trial({"theta_max": 0.8, "angle_penalty": 2.5, "layer01_radial_penalty": 7.0, "length_penalty": 0.05, "layer01_radial_tolerance": 0.12, "curvature_bonus": 0.7, "curvature_penalty": 0.2, "curvature_tolerance": 0.1})
+    # S6 — moderate with strong curvature bonus (reward real tracks loudly)
+    study.enqueue_trial({"theta_max": 0.60, "angle_penalty": 3.2, "length_penalty": 0.130, "layer01_radial_tolerance": 0.28, "curvature_bonus": 1.15, "curvature_penalty": 0.550, "curvature_tolerance": 0.020})
     
     study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
 

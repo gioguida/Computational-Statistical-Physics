@@ -50,10 +50,10 @@ uv run scripts/run_dataset_sweep.py \
   --ensemble-statistic mean \
   --trim-fraction 0.1 \
   --min-datasets-before-pruning 3 \
-  --theta-max 0.50 0.80 \
-  --angle-penalty 2.0 4.0 \
-  --length-penalty 0.05 0.20 \
-  --layer01-radial-tolerance 0.20 0.35 \
-  --curvature-bonus 0.3 0.9 \
-  --curvature-penalty 0.3 0.8 \
+  --theta-max 0.40 0.80 \
+  --angle-penalty 2.0 5.0 \
+  --length-penalty 0.05 0.25 \
+  --layer01-radial-tolerance 0.15 0.35 \
+  --curvature-bonus 0.3 1.2 \
+  --curvature-penalty 0.3 1.0 \
   --curvature-tolerance 0.01 0.06

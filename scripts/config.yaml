@@ -22,8 +22,8 @@ generation:
     traj_radius_low: 4
     traj_radius_high: 20
     detector_layers: [1, 2, 3, 4, 5]
-    sigma_res: 0.0 # 0.05
-    mean_fakes_per_layer: 0.0 # 2
+    sigma_res: 0.05 # 0.05
+    mean_fakes_per_layer: 2.0 # 2
 
 interaction:
   theta_max: 0.6445311067552775
