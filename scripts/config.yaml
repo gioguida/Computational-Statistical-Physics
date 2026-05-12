@@ -26,14 +26,14 @@ generation:
     mean_fakes_per_layer: 0.0 # 2
 
 interaction:
-  theta_max: 0.35
+  theta_max: 0.6445311067552775
   merge_penalty: 10.0
   fork_penalty: 10.0
-  angle_penalty: 2.0
-  layer01_radial_penalty: 5.0
-  curvature_bonus: 1.0
-  curvature_penalty: 0.5
-  curvature_tolerance: 0.08
+  angle_penalty: 2.9083282328787976
+  layer01_radial_penalty: 3.3312796335998174
+  curvature_bonus: 0.5714182333135007
+  curvature_penalty: 0.5548262095768024
+  curvature_tolerance: 0.020503328360057898
 
 annealing:
   cooling_schedule: linear  # geometric | linear
@@ -42,14 +42,14 @@ annealing:
   n_steps: 600
   checkpoint_every_steps: 10
   toll: 1e-08
-  length_penalty: 0.5
-  layer01_radial_tolerance: 0.23
+  length_penalty: 0.13124396574410624
+  layer01_radial_tolerance: 0.28557027306016236
   eq_sweeps: 100
   log_every_steps: 100
   seed: 42
-  curvature_bonus: 1.0
-  curvature_penalty: 0.5
-  curvature_tolerance: 0.10
+  curvature_bonus: 0.5714182333135007
+  curvature_penalty: 0.5548262095768024
+  curvature_tolerance: 0.020503328360057898
 
 plotting:
   create_annealing_animation: false
