@@ -232,7 +232,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runs-root-base", default=None)
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
     parser.add_argument("--angle-penalty", nargs="+", type=float, required=True)
-    parser.add_argument("--layer01-radial-penalty", nargs="+", type=float, required=True)
+    parser.add_argument("--layer01-radial-penalty", nargs="+", type=float, default=[0.0, 15.0])
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-bonus", nargs="+", type=float, required=True)
@@ -613,7 +613,8 @@ def main() -> int:
     study.enqueue_trial({"theta_max": 0.65, "angle_penalty": 3.0, "length_penalty": 0.140, "layer01_radial_tolerance": 0.28, "curvature_bonus": 0.60, "curvature_penalty": 0.60, "curvature_tolerance": 0.012})
 
     # S7 — lower length_penalty + wider theta (different tradeoff point)
-    study.enqueue_trial({"theta_max": 0.73, "angle_penalty": 2.5, "length_penalty": 0.060, "layer01_radial_tolerance": 0.29, "curvature_bonus": 0.40, "curvature_penalty": 0.55, "curvature_tolerance": 0.028})enqueue_trial({"theta_max": 0.8, "angle_penalty": 2.5, "layer_radius_penalty": 7.0, "length_penalty": 0.05, "layer01_radial_tolerance": 0.12, "curvature_bonus": 0.7, "curvature_penalty": 0.2, "curvature_tolerance": 0.1})
+    study.enqueue_trial({"theta_max": 0.73, "angle_penalty": 2.5, "length_penalty": 0.060, "layer01_radial_tolerance": 0.29, "curvature_bonus": 0.40, "curvature_penalty": 0.55, "curvature_tolerance": 0.028})
+    study.enqueue_trial({"theta_max": 0.8, "angle_penalty": 2.5, "layer01_radial_penalty": 7.0, "length_penalty": 0.05, "layer01_radial_tolerance": 0.12, "curvature_bonus": 0.7, "curvature_penalty": 0.2, "curvature_tolerance": 0.1})
     
     study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
 
