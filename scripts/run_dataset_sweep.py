@@ -9,6 +9,7 @@ import math
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -96,8 +97,8 @@ def generate_dataset(cfg: DataConfig, seed: int, out_dir: Path) -> tuple[Path, P
     return train_path, gt_path
 
 
-def run_cmd(cmd: list[str], cwd: Path) -> None:
-    subprocess.run(cmd, cwd=cwd, check=True)
+def run_cmd(cmd: list[str], cwd: Path, timeout_s: float | None = None) -> None:
+    subprocess.run(cmd, cwd=cwd, check=True, timeout=timeout_s)
 
 
 def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +118,15 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
 
     p = job["params"]
     ann = job["annealing_base"]
+    trial_deadline = job.get("trial_deadline")
+
+    def remaining_trial_timeout() -> float | None:
+        if trial_deadline is None:
+            return None
+        remaining = float(trial_deadline) - time.monotonic()
+        if remaining <= 0.0:
+            raise TimeoutError("trial timeout reached before starting command")
+        return remaining
 
     run_cmd(
         [
@@ -128,13 +138,14 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "--theta-max",
             str(p["theta_max"]),
             "--merge-penalty",
-            str(job["merge_penalty"]),
+            str(p["merge_penalty"]),
             "--fork-penalty",
-            str(job["fork_penalty"]),
+            str(p["fork_penalty"]),
             "--angle-penalty",
             str(p["angle_penalty"]),
         ],
         cwd=project_root,
+        timeout_s=remaining_trial_timeout(),
     )
 
     run_cmd(
@@ -151,9 +162,9 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "--t-min",
             str(ann["t_min"]),
             "--t-max",
-            str(ann["t_max"]),
+            str(p["t_max"]),
             "--n-steps",
-            str(ann["n_steps"]),
+            str(int(p["n_steps"])),
             "--toll",
             str(ann["toll"]),
             "--length-penalty",
@@ -165,7 +176,7 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "--first-gap",
             str(job["first_gap"]),
             "--eq-sweeps",
-            str(ann["eq_sweeps"]),
+            str(int(p["eq_sweeps"])),
             "--log-every-steps",
             str(ann["log_every_steps"]),
             "--checkpoint-every-steps",
@@ -182,6 +193,7 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             str(p["curvature_tolerance"]),
         ],
         cwd=project_root,
+        timeout_s=remaining_trial_timeout(),
     )
 
     metrics = visualize_metrics(
@@ -191,8 +203,8 @@ def run_one_job(job: dict[str, Any]) -> dict[str, Any]:
             "training_hits_csv": str(hits_csv),
             "ground_truth_csv": str(gt_csv),
             "n_layers": int(job["n_layers"]),
-            "merge_penalty": float(job["merge_penalty"]),
-            "fork_penalty": float(job["fork_penalty"]),
+            "merge_penalty": float(p["merge_penalty"]),
+            "fork_penalty": float(p["fork_penalty"]),
             "angle_penalty": float(p["angle_penalty"]),
         }
     )
@@ -220,6 +232,24 @@ def _bounds(values: list[float], name: str) -> tuple[float, float]:
     return (float(lo), float(hi))
 
 
+def _resolve_float_bounds(values: list[float] | None, default: float, name: str) -> tuple[float, float]:
+    if values is None:
+        return (float(default), float(default))
+    return _bounds(values, name)
+
+
+def _resolve_int_bounds(values: list[int] | None, default: int) -> tuple[int, int]:
+    if values is None:
+        return (int(default), int(default))
+    lo = int(min(values))
+    hi = int(max(values))
+    return (lo, hi)
+
+
+def _is_swept(lo: float | int, hi: float | int) -> bool:
+    return lo != hi
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dataset-ensemble Bayesian optimization with Optuna")
     parser.add_argument("--config", default="scripts/config.yaml")
@@ -232,12 +262,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runs-root-base", default=None)
     parser.add_argument("--theta-max", nargs="+", type=float, required=True)
     parser.add_argument("--angle-penalty", nargs="+", type=float, required=True)
-    parser.add_argument("--layer01-radial-penalty", nargs="+", type=float, default=[0.0, 15.0])
+    parser.add_argument(
+        "--layer01-radial-penalty",
+        "--layer-radius-penalty",
+        dest="layer01_radial_penalty",
+        nargs="+",
+        type=float,
+        default=[0.0, 15.0],
+    )
     parser.add_argument("--length-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--layer01-radial-tolerance", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-bonus", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-penalty", nargs="+", type=float, required=True)
     parser.add_argument("--curvature-tolerance", nargs="+", type=float, required=True)
+    parser.add_argument("--t-max", nargs=2, type=float, default=None)
+    parser.add_argument("--n-steps", nargs=2, type=int, default=None)
+    parser.add_argument("--eq-sweeps", nargs=2, type=int, default=None)
+    parser.add_argument("--merge-penalty", nargs=2, type=float, default=None)
+    parser.add_argument("--fork-penalty", nargs=2, type=float, default=None)
     parser.add_argument("--sampler-seed", type=int, default=42)
     parser.add_argument("--max-fake-rate", type=float, default=None)
     parser.add_argument("--max-bifurcations", type=int, default=None)
@@ -247,6 +289,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trim-fraction", type=float, default=0.1)
     parser.add_argument("--pruning", action="store_true")
     parser.add_argument("--min-datasets-before-pruning", type=int, default=3)
+    parser.add_argument("--head-starts", default=None)
+    parser.add_argument("--trial-timeout", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -265,6 +309,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--min-datasets-before-pruning must be at least 1")
     if args.min_datasets_before_pruning >= args.datasets:
         raise ValueError("--min-datasets-before-pruning must be less than --datasets")
+    if args.trial_timeout < 0.0:
+        raise ValueError("--trial-timeout must be non-negative")
 
 
 def finite_values(values: list[float]) -> np.ndarray:
@@ -339,9 +385,6 @@ def main() -> int:
     inter_cfg = cfg.get("interaction", {})
     ann_cfg = cfg.get("annealing", {})
 
-    merge_penalty = float(inter_cfg.get("merge_penalty", 10.0))
-    fork_penalty = float(inter_cfg.get("fork_penalty", 10.0))
-
     annealing_base = {
         "t_min": float(ann_cfg.get("t_min", 1e-3)),
         "t_max": float(ann_cfg.get("t_max", 2.0)),
@@ -361,6 +404,40 @@ def main() -> int:
     curv_bonus_lo, curv_bonus_hi = _bounds(args.curvature_bonus, "curvature_bonus")
     curv_penalty_lo, curv_penalty_hi = _bounds(args.curvature_penalty, "curvature_penalty")
     curv_tol_lo, curv_tol_hi = _bounds(args.curvature_tolerance, "curvature_tolerance")
+    t_max_lo, t_max_hi = _resolve_float_bounds(args.t_max, float(annealing_base["t_max"]), "t_max")
+    n_steps_lo, n_steps_hi = _resolve_int_bounds(args.n_steps, int(annealing_base["n_steps"]))
+    eq_sweeps_lo, eq_sweeps_hi = _resolve_int_bounds(args.eq_sweeps, int(annealing_base["eq_sweeps"]))
+    merge_penalty_lo, merge_penalty_hi = _resolve_float_bounds(
+        args.merge_penalty, float(inter_cfg.get("merge_penalty", 10.0)), "merge_penalty"
+    )
+    fork_penalty_lo, fork_penalty_hi = _resolve_float_bounds(
+        args.fork_penalty, float(inter_cfg.get("fork_penalty", 10.0)), "fork_penalty"
+    )
+    if _is_swept(t_max_lo, t_max_hi) and t_max_lo <= 0.0:
+        raise ValueError("--t-max lower bound must be > 0 when sweeping (log scale)")
+    if n_steps_lo <= 0 or n_steps_hi <= 0:
+        raise ValueError("--n-steps bounds must be positive")
+    if eq_sweeps_lo <= 0 or eq_sweeps_hi <= 0:
+        raise ValueError("--eq-sweeps bounds must be positive")
+
+    param_bounds: dict[str, tuple[float | int, float | int]] = {
+        "theta_max": (theta_lo, theta_hi),
+        "angle_penalty": (angle_lo, angle_hi),
+        "layer01_radial_penalty": (layer_radius_lo, layer_radius_hi),
+        "length_penalty": (length_lo, length_hi),
+        "layer01_radial_tolerance": (tol_lo, tol_hi),
+        "curvature_bonus": (curv_bonus_lo, curv_bonus_hi),
+        "curvature_penalty": (curv_penalty_lo, curv_penalty_hi),
+        "curvature_tolerance": (curv_tol_lo, curv_tol_hi),
+        "t_max": (t_max_lo, t_max_hi),
+        "n_steps": (n_steps_lo, n_steps_hi),
+        "eq_sweeps": (eq_sweeps_lo, eq_sweeps_hi),
+        "merge_penalty": (merge_penalty_lo, merge_penalty_hi),
+        "fork_penalty": (fork_penalty_lo, fork_penalty_hi),
+    }
+    swept_dims = [name for name, (lo, hi) in param_bounds.items() if _is_swept(lo, hi)]
+    fixed_dims = {name: lo for name, (lo, hi) in param_bounds.items() if not _is_swept(lo, hi)}
+    fixed_dims["t_min"] = float(annealing_base["t_min"])
 
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
@@ -378,7 +455,7 @@ def main() -> int:
     print(f"Trials per dataset: {args.trials_per_dataset}")
     print(
         (
-            f"Parallelism: {args.workers} trials × {args.ensemble_workers} ensemble workers "
+            f"Parallelism: {args.workers} trials x {args.ensemble_workers} ensemble workers "
             f"= {args.workers * args.ensemble_workers} max concurrent pipelines"
         ),
         flush=True,
@@ -390,6 +467,9 @@ def main() -> int:
         ),
         flush=True,
     )
+    print(f"Sweep dimensions ({len(swept_dims)}): {', '.join(swept_dims) if swept_dims else '(none)'}", flush=True)
+    fixed_summary = ", ".join(f"{key}={value}" for key, value in fixed_dims.items())
+    print(f"Fixed parameters: {fixed_summary}", flush=True)
 
     datasets: list[dict[str, Any]] = []
     for d in range(args.datasets):
@@ -413,7 +493,12 @@ def main() -> int:
     ensemble_rows: list[dict[str, Any]] = []
     rows_lock = threading.Lock()
 
-    def evaluate_dataset(trial_number: int, params: dict[str, float], dataset: dict[str, Any]) -> dict[str, Any]:
+    def evaluate_dataset(
+        trial_number: int,
+        params: dict[str, float | int],
+        dataset: dict[str, Any],
+        trial_deadline: float | None,
+    ) -> dict[str, Any]:
         run_id = f"{dataset['dataset_id']}_trial_{trial_number:04d}"
         run_dir = runs_root / run_id
         base_row: dict[str, Any] = {
@@ -422,6 +507,12 @@ def main() -> int:
             "trial_number": trial_number,
             "run_id": run_id,
             **params,
+            "T_max": float(params["t_max"]),
+            "T_min": float(annealing_base["t_min"]),
+            "n_steps": int(params["n_steps"]),
+            "eq_sweeps": int(params["eq_sweeps"]),
+            "merge_penalty": float(params["merge_penalty"]),
+            "fork_penalty": float(params["fork_penalty"]),
         }
         try:
             row = run_one_job(
@@ -433,11 +524,10 @@ def main() -> int:
                     "gt_csv": dataset["gt_csv"],
                     "n_layers": len(detector_layers),
                     "first_gap": first_gap,
-                    "merge_penalty": merge_penalty,
-                    "fork_penalty": fork_penalty,
                     "annealing_base": annealing_base,
                     "anneal_seed": int(ann_cfg.get("seed", 42)),
                     "params": params,
+                    "trial_deadline": trial_deadline,
                 }
             )
             metric_value = float(row[args.objective_metric])
@@ -465,6 +555,44 @@ def main() -> int:
             row["prune_reason"] = prune_reason
             row["state"] = "PRUNED" if pruned else "COMPLETE"
             return row
+        except subprocess.TimeoutExpired as exc:
+            print(
+                (
+                    f"WARNING: trial {trial_number} dataset {dataset['dataset_id']} timed out: "
+                    f"{exc}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            return {
+                **base_row,
+                "objective_metric": args.objective_metric,
+                "objective_metric_value": float("nan"),
+                "objective_value": float("nan"),
+                "pruned": False,
+                "prune_reason": None,
+                "state": "TIMEOUT",
+                "error": str(exc),
+            }
+        except TimeoutError as exc:
+            print(
+                (
+                    f"WARNING: trial {trial_number} dataset {dataset['dataset_id']} timed out: "
+                    f"{exc}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            return {
+                **base_row,
+                "objective_metric": args.objective_metric,
+                "objective_metric_value": float("nan"),
+                "objective_value": float("nan"),
+                "pruned": False,
+                "prune_reason": None,
+                "state": "TIMEOUT",
+                "error": str(exc),
+            }
         except Exception as exc:
             print(
                 (
@@ -486,71 +614,160 @@ def main() -> int:
             }
 
     def objective(trial: optuna.Trial) -> float:
-        params = {
-            "theta_max": trial.suggest_float("theta_max", theta_lo, theta_hi),
-            "angle_penalty": trial.suggest_float("angle_penalty", angle_lo, angle_hi),
-            "layer01_radial_penalty": trial.suggest_float(
+        if _is_swept(theta_lo, theta_hi):
+            theta_max = trial.suggest_float("theta_max", theta_lo, theta_hi)
+        else:
+            theta_max = theta_lo
+        if _is_swept(angle_lo, angle_hi):
+            angle_penalty = trial.suggest_float("angle_penalty", angle_lo, angle_hi)
+        else:
+            angle_penalty = angle_lo
+        if _is_swept(layer_radius_lo, layer_radius_hi):
+            layer01_radial_penalty = trial.suggest_float(
                 "layer01_radial_penalty", layer_radius_lo, layer_radius_hi
-            ),
-            "length_penalty": trial.suggest_float("length_penalty", length_lo, length_hi),
-            "layer01_radial_tolerance": trial.suggest_float(
+            )
+        else:
+            layer01_radial_penalty = layer_radius_lo
+        if _is_swept(length_lo, length_hi):
+            length_penalty = trial.suggest_float("length_penalty", length_lo, length_hi)
+        else:
+            length_penalty = length_lo
+        if _is_swept(tol_lo, tol_hi):
+            layer01_radial_tolerance = trial.suggest_float(
                 "layer01_radial_tolerance", tol_lo, tol_hi
-            ),
-            "curvature_bonus": trial.suggest_float("curvature_bonus", curv_bonus_lo, curv_bonus_hi),
-            "curvature_penalty": trial.suggest_float(
+            )
+        else:
+            layer01_radial_tolerance = tol_lo
+        if _is_swept(curv_bonus_lo, curv_bonus_hi):
+            curvature_bonus = trial.suggest_float("curvature_bonus", curv_bonus_lo, curv_bonus_hi)
+        else:
+            curvature_bonus = curv_bonus_lo
+        if _is_swept(curv_penalty_lo, curv_penalty_hi):
+            curvature_penalty = trial.suggest_float(
                 "curvature_penalty", curv_penalty_lo, curv_penalty_hi
-            ),
-            "curvature_tolerance": trial.suggest_float(
+            )
+        else:
+            curvature_penalty = curv_penalty_lo
+        if _is_swept(curv_tol_lo, curv_tol_hi):
+            curvature_tolerance = trial.suggest_float(
                 "curvature_tolerance", curv_tol_lo, curv_tol_hi
-            ),
+            )
+        else:
+            curvature_tolerance = curv_tol_lo
+        if _is_swept(t_max_lo, t_max_hi):
+            t_max = trial.suggest_float("t_max", float(t_max_lo), float(t_max_hi), log=True)
+        else:
+            t_max = float(t_max_lo)
+        if _is_swept(n_steps_lo, n_steps_hi):
+            n_steps = trial.suggest_int("n_steps", int(n_steps_lo), int(n_steps_hi), step=50)
+        else:
+            n_steps = int(n_steps_lo)
+        if _is_swept(eq_sweeps_lo, eq_sweeps_hi):
+            eq_sweeps = trial.suggest_int("eq_sweeps", int(eq_sweeps_lo), int(eq_sweeps_hi), step=10)
+        else:
+            eq_sweeps = int(eq_sweeps_lo)
+        if _is_swept(merge_penalty_lo, merge_penalty_hi):
+            merge_penalty = trial.suggest_float("merge_penalty", merge_penalty_lo, merge_penalty_hi)
+        else:
+            merge_penalty = merge_penalty_lo
+        if _is_swept(fork_penalty_lo, fork_penalty_hi):
+            fork_penalty = trial.suggest_float("fork_penalty", fork_penalty_lo, fork_penalty_hi)
+        else:
+            fork_penalty = fork_penalty_lo
+
+        params = {
+            "theta_max": float(theta_max),
+            "angle_penalty": float(angle_penalty),
+            "layer01_radial_penalty": float(layer01_radial_penalty),
+            "length_penalty": float(length_penalty),
+            "layer01_radial_tolerance": float(layer01_radial_tolerance),
+            "curvature_bonus": float(curvature_bonus),
+            "curvature_penalty": float(curvature_penalty),
+            "curvature_tolerance": float(curvature_tolerance),
+            "t_max": float(t_max),
+            "t_min": float(annealing_base["t_min"]),
+            "n_steps": int(n_steps),
+            "eq_sweeps": int(eq_sweeps),
+            "merge_penalty": float(merge_penalty),
+            "fork_penalty": float(fork_penalty),
         }
 
         values_by_dataset: dict[str, float] = {}
         dataset_rows: list[dict[str, Any]] = []
         state = "COMPLETE"
         prune_reason = None
+        trial_deadline = time.monotonic() + args.trial_timeout if args.trial_timeout > 0 else None
 
         with futures.ThreadPoolExecutor(max_workers=args.ensemble_workers) as executor:
             submitted = {
-                executor.submit(evaluate_dataset, trial.number, params, dataset): dataset
+                executor.submit(evaluate_dataset, trial.number, params, dataset, trial_deadline): dataset
                 for dataset in datasets
             }
-            for completed_count, future in enumerate(futures.as_completed(submitted), start=1):
-                row = future.result()
-                dataset_rows.append(row)
-                values_by_dataset[row["dataset_id"]] = float(row["objective_metric_value"])
-
-                current_values = list(values_by_dataset.values())
-                current_objective = aggregate_values(
-                    current_values,
-                    statistic=args.ensemble_statistic,
-                    trim_fraction=args.trim_fraction,
-                )
-                if args.pruning and completed_count >= args.min_datasets_before_pruning:
-                    if math.isfinite(current_objective):
-                        trial.report(current_objective, step=completed_count)
-                    if trial.should_prune():
-                        state = "PRUNED"
-                        prune_reason = f"pruned after {completed_count} datasets"
+            completed_count = 0
+            try:
+                as_completed_timeout = args.trial_timeout if args.trial_timeout > 0 else None
+                for future in futures.as_completed(submitted, timeout=as_completed_timeout):
+                    completed_count += 1
+                    row = future.result()
+                    dataset_rows.append(row)
+                    values_by_dataset[row["dataset_id"]] = float(row["objective_metric_value"])
+                    if row.get("state") == "TIMEOUT":
+                        state = "TIMEOUT"
+                        prune_reason = f"trial timed out after {args.trial_timeout:.2f}s"
                         for pending in submitted:
                             pending.cancel()
                         break
 
+                    current_values = list(values_by_dataset.values())
+                    current_objective = aggregate_values(
+                        current_values,
+                        statistic=args.ensemble_statistic,
+                        trim_fraction=args.trim_fraction,
+                    )
+                    if args.pruning and completed_count >= args.min_datasets_before_pruning:
+                        if math.isfinite(current_objective):
+                            trial.report(current_objective, step=completed_count)
+                        if trial.should_prune():
+                            state = "PRUNED"
+                            prune_reason = f"pruned after {completed_count} datasets"
+                            for pending in submitted:
+                                pending.cancel()
+                            break
+            except futures.TimeoutError:
+                state = "TIMEOUT"
+                prune_reason = f"trial timed out after {args.trial_timeout:.2f}s"
+                print(
+                    f"WARNING: trial {trial.number} exceeded timeout of {args.trial_timeout:.2f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                for pending in submitted:
+                    pending.cancel()
+
         values = [values_by_dataset.get(dataset["dataset_id"], float("nan")) for dataset in datasets]
-        objective_value = aggregate_values(
-            values,
-            statistic=args.ensemble_statistic,
-            trim_fraction=args.trim_fraction,
-        )
-        if not math.isfinite(objective_value):
-            objective_value = failed_objective(args.objective_direction)
-            state = "FAIL"
+        if state == "TIMEOUT":
+            objective_value = 0.0 if args.objective_direction == "maximize" else float("inf")
+        else:
+            objective_value = aggregate_values(
+                values,
+                statistic=args.ensemble_statistic,
+                trim_fraction=args.trim_fraction,
+            )
+            if not math.isfinite(objective_value):
+                objective_value = failed_objective(args.objective_direction)
+                state = "FAIL"
 
         successful_count = int(len(finite_values(values)))
 
         summary = {
             "trial_number": trial.number,
             **params,
+            "T_max": float(params["t_max"]),
+            "T_min": float(params["t_min"]),
+            "n_steps": int(params["n_steps"]),
+            "eq_sweeps": int(params["eq_sweeps"]),
+            "merge_penalty": float(params["merge_penalty"]),
+            "fork_penalty": float(params["fork_penalty"]),
             **{f"metric_{dataset['dataset_id']}": values_by_dataset.get(dataset["dataset_id"], float("nan"))
                for dataset in datasets},
             **ensemble_summary(values),
@@ -591,27 +808,33 @@ def main() -> int:
         sampler=sampler,
         pruner=pruner,
     )
-    # S0 — no-noise winner (baseline)
-    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 2.908, "length_penalty": 0.131, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.571, "curvature_penalty": 0.555, "curvature_tolerance": 0.021})
+    if args.head_starts is not None:
+        head_starts_path = Path(args.head_starts).expanduser()
+        if not head_starts_path.is_absolute():
+            head_starts_path = (PROJECT_ROOT / head_starts_path).resolve()
+        with head_starts_path.open("r", encoding="utf-8") as fh:
+            head_starts_data = json.load(fh)
+        if not isinstance(head_starts_data, list):
+            raise ValueError("--head-starts JSON must contain a list of parameter mappings")
 
-    # S1 — same structure, penalties scaled up ~1.5x
-    study.enqueue_trial({"theta_max": 0.645, "angle_penalty": 3.5, "length_penalty": 0.180, "layer01_radial_tolerance": 0.286, "curvature_bonus": 0.700, "curvature_penalty": 0.800, "curvature_tolerance": 0.021})
+        swept_keys = set(swept_dims)
+        enqueued = 0
+        for item in head_starts_data:
+            if not isinstance(item, dict):
+                continue
+            candidate: dict[str, Any] = {}
+            for key, value in item.items():
+                if key not in swept_keys:
+                    continue
+                if key in {"n_steps", "eq_sweeps"}:
+                    candidate[key] = int(value)
+                else:
+                    candidate[key] = float(value)
+            if candidate:
+                study.enqueue_trial(candidate)
+                enqueued += 1
+        print(f"Enqueued {enqueued} head-start trials from {head_starts_path}", flush=True)
 
-    # S2 — tighter theta + stronger penalties (noise-hostile)
-    study.enqueue_trial({"theta_max": 0.50, "angle_penalty": 4.0, "length_penalty": 0.200, "layer01_radial_tolerance": 0.25, "curvature_bonus": 0.900, "curvature_penalty": 0.900, "curvature_tolerance": 0.015})
-
-    # S3 — wide theta but heavy curvature filtering (let geometry in, filter by physics)
-    study.enqueue_trial({"theta_max": 0.75, "angle_penalty": 3.0, "length_penalty": 0.100, "layer01_radial_tolerance": 0.30, "curvature_bonus": 1.100, "curvature_penalty": 0.700, "curvature_tolerance": 0.018})
-
-    # S4 — trial 43 regime scaled for noise
-    study.enqueue_trial({"theta_max": 0.667, "angle_penalty": 2.8, "length_penalty": 0.150, "layer01_radial_tolerance": 0.250, "curvature_bonus": 0.600, "curvature_penalty": 0.650, "curvature_tolerance": 0.030})
-
-    # S5 — aggressive: tight everything
-    study.enqueue_trial({"theta_max": 0.45, "angle_penalty": 4.5, "length_penalty": 0.220, "layer01_radial_tolerance": 0.18, "curvature_bonus": 1.0, "curvature_penalty": 0.950, "curvature_tolerance": 0.012})
-
-    # S6 — moderate with strong curvature bonus (reward real tracks loudly)
-    study.enqueue_trial({"theta_max": 0.60, "angle_penalty": 3.2, "length_penalty": 0.130, "layer01_radial_tolerance": 0.28, "curvature_bonus": 1.15, "curvature_penalty": 0.550, "curvature_tolerance": 0.020})
-    
     study.optimize(objective, n_trials=total_trials, n_jobs=args.workers)
 
     summary_df = pd.DataFrame(all_rows)
@@ -692,6 +915,10 @@ def main() -> int:
                 "min_datasets_before_pruning": args.min_datasets_before_pruning,
                 "prune_on_fake_rate": args.max_fake_rate,
                 "prune_on_bifurcations": args.max_bifurcations,
+                "trial_timeout_seconds": args.trial_timeout,
+                "head_starts": args.head_starts,
+                "sweep_dimensions": swept_dims,
+                "fixed_parameters": fixed_dims,
             },
             fh,
             indent=2,
@@ -706,3 +933,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -1,0 +1,50 @@
+[
+  {
+    "_comment": "Previous best ensemble config (trial 29 from noisy sweep)",
+    "theta_max": 0.407,
+    "angle_penalty": 2.03,
+    "layer01_radial_penalty": 14.33,
+    "length_penalty": 0.224,
+    "layer01_radial_tolerance": 0.216,
+    "curvature_bonus": 0.447,
+    "curvature_penalty": 0.418,
+    "curvature_tolerance": 0.059,
+    "t_max": 4.0,
+    "n_steps": 600,
+    "eq_sweeps": 100,
+    "merge_penalty": 10.0,
+    "fork_penalty": 10.0
+  },
+  {
+    "_comment": "Same interaction params but hotter start and longer anneal",
+    "theta_max": 0.407,
+    "angle_penalty": 2.03,
+    "layer01_radial_penalty": 14.33,
+    "length_penalty": 0.224,
+    "layer01_radial_tolerance": 0.216,
+    "curvature_bonus": 0.447,
+    "curvature_penalty": 0.418,
+    "curvature_tolerance": 0.059,
+    "t_max": 7.0,
+    "n_steps": 800,
+    "eq_sweeps": 150,
+    "merge_penalty": 10.0,
+    "fork_penalty": 10.0
+  },
+  {
+    "_comment": "Relaxed penalties, tight theta, hot start",
+    "theta_max": 0.35,
+    "angle_penalty": 3.0,
+    "layer01_radial_penalty": 10.0,
+    "length_penalty": 0.10,
+    "layer01_radial_tolerance": 0.25,
+    "curvature_bonus": 0.8,
+    "curvature_penalty": 0.35,
+    "curvature_tolerance": 0.08,
+    "t_max": 6.0,
+    "n_steps": 700,
+    "eq_sweeps": 200,
+    "merge_penalty": 7.0,
+    "fork_penalty": 7.0
+  }
+]
