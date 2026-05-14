@@ -2,7 +2,7 @@
 #SBATCH --job-name=fixed-config-eval
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=48
+#SBATCH --cpus-per-task=64
 #SBATCH --time=08:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
@@ -23,28 +23,20 @@ export NUMEXPR_NUM_THREADS=1
 export MPLBACKEND=Agg
 export MPLCONFIGDIR="${PROJECT_ROOT}/.mplconfig"
 
-MAX_WORKERS=48
-WORKERS="${FIXED_WORKERS:-${SLURM_CPUS_PER_TASK:-48}}"
+MAX_WORKERS=64
+WORKERS=64
 if (( WORKERS > MAX_WORKERS )); then
   WORKERS="$MAX_WORKERS"
 fi
-if (( WORKERS < 1 )); then
-  WORKERS=1
-fi
 
-DATASETS="${FIXED_DATASETS:-96}"
-DATASET_SEED_START="${FIXED_DATASET_SEED_START:-1000}"
-ANNEAL_SEED_START="${FIXED_ANNEAL_SEED_START:-}"
-OUTPUT_ROOT="${FIXED_OUTPUT_ROOT:-results/fixed_config_eval}"
-if [[ -n "${FIXED_SCRATCH_ROOT:-}" ]]; then
-  SCRATCH_ROOT="${FIXED_SCRATCH_ROOT}"
-elif [[ -n "${SCRATCH:-}" ]]; then
+DATASETS=128
+DATASET_SEED_START=1000
+OUTPUT_ROOT="results/fixed_config_eval"
+if [[ -n "${SCRATCH:-}" ]]; then
   SCRATCH_ROOT="${SCRATCH}/CSP/fixed_config_eval/${SLURM_JOB_ID:-local}"
 else
   SCRATCH_ROOT="${TMPDIR:-$PROJECT_ROOT/results/tmp}/fixed_config_eval_${SLURM_JOB_ID:-local}"
 fi
-KEEP_RUN_ARTIFACTS="${FIXED_KEEP_RUN_ARTIFACTS:-0}"
-VARY_ANNEAL_SEED="${FIXED_VARY_ANNEAL_SEED:-0}"
 
 if command -v uv >/dev/null 2>&1; then
   PYTHON_RUN=(uv run python)
@@ -69,16 +61,6 @@ CMD=(
   --output-root "$OUTPUT_ROOT"
   --scratch-root "$SCRATCH_ROOT"
 )
-
-if [[ -n "$ANNEAL_SEED_START" ]]; then
-  CMD+=(--anneal-seed-start "$ANNEAL_SEED_START")
-fi
-if (( KEEP_RUN_ARTIFACTS != 0 )); then
-  CMD+=(--keep-run-artifacts)
-fi
-if (( VARY_ANNEAL_SEED != 0 )); then
-  CMD+=(--vary-anneal-seed)
-fi
 
 printf 'Running:'
 for token in "${CMD[@]}"; do
