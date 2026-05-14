@@ -6,6 +6,7 @@ import concurrent.futures as futures
 import datetime as dt
 import json
 import math
+import os
 import queue
 import shutil
 import subprocess
@@ -42,6 +43,26 @@ SUMMARY_METRICS = (
     "n_segments",
     "n_nonzero_edges",
     "cpp_worker_peak_estimate_mb",
+)
+OBJECTIVE_METRIC = "search_score"
+OBJECTIVE_STATISTIC = "mean"
+SWEEP_SUMMARY_CORE_COLUMNS = (
+    "dataset_id",
+    "dataset_seed",
+    "trial_number",
+    "run_id",
+    "segment_precision",
+    "segment_recall",
+    "track_efficiency",
+    "track_fake_rate",
+    "n_bifurcations",
+    "objective_metric",
+    "objective_metric_value",
+    "objective_value",
+    "pruned",
+    "prune_reason",
+    "state",
+    "error",
 )
 
 
@@ -315,6 +336,55 @@ def series_to_native_summary(df: pd.DataFrame, columns: tuple[str, ...]) -> dict
     }
 
 
+def _with_sweep_core_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for column in SWEEP_SUMMARY_CORE_COLUMNS:
+        if column not in out.columns:
+            out[column] = None
+    return out
+
+
+def _build_ensemble_row(summary_trials_df: pd.DataFrame, datasets: int) -> dict[str, Any]:
+    complete_df = summary_trials_df[summary_trials_df["state"] == "COMPLETE"].copy()
+    numeric_values = pd.to_numeric(complete_df["objective_metric_value"], errors="coerce").dropna()
+    successful = int(len(numeric_values))
+    failed = int(datasets - successful)
+
+    row: dict[str, Any] = {
+        "trial_number": 0,
+        "objective_metric": OBJECTIVE_METRIC,
+        "objective_statistic": OBJECTIVE_STATISTIC,
+        "state": "COMPLETE" if successful > 0 else "FAIL",
+        "successful_datasets": successful,
+        "failed_datasets": failed,
+        "prune_reason": None,
+    }
+    for idx in range(int(datasets)):
+        dataset_id = f"ds_{idx:04d}"
+        value = float("nan")
+        hit = complete_df[complete_df["dataset_id"] == dataset_id]
+        if not hit.empty:
+            value = native_value(hit.iloc[0].get("objective_metric_value"))
+        row[f"metric_{dataset_id}"] = value
+
+    if successful > 0:
+        row["ensemble_mean"] = float(numeric_values.mean())
+        row["ensemble_median"] = float(np.median(numeric_values.to_numpy()))
+        row["ensemble_std"] = float(numeric_values.std(ddof=1)) if successful > 1 else 0.0
+        row["ensemble_min"] = float(numeric_values.min())
+        row["ensemble_max"] = float(numeric_values.max())
+        row["objective_value"] = float(row["ensemble_mean"])
+    else:
+        row["ensemble_mean"] = float("nan")
+        row["ensemble_median"] = float("nan")
+        row["ensemble_std"] = float("nan")
+        row["ensemble_min"] = float("nan")
+        row["ensemble_max"] = float("nan")
+        row["objective_value"] = float("nan")
+
+    return row
+
+
 def write_summary_report(
     out_path: Path,
     dataset_rows: pd.DataFrame,
@@ -425,15 +495,16 @@ def main() -> int:
     workers = min(int(args.workers), int(args.datasets))
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     sweep_root = (PROJECT_ROOT / args.output_root / stamp).resolve()
-    scratch_root = (
-        Path(args.scratch_root).resolve()
-        if args.scratch_root is not None
-        else (sweep_root / "_scratch").resolve()
-    )
-    runs_root = sweep_root / "dataset_runs"
-    failures_root = sweep_root / "failures"
+    if args.scratch_root is not None:
+        scratch_root = Path(args.scratch_root).resolve()
+    else:
+        tmp_base = Path(os.environ.get("TMPDIR", str(PROJECT_ROOT / "results" / "tmp"))).resolve()
+        scratch_root = (tmp_base / f"fixed_config_eval_{stamp}").resolve()
+    runs_root = scratch_root / "dataset_runs"
+    failures_root = scratch_root / "failures"
 
     sweep_root.mkdir(parents=True, exist_ok=True)
+    scratch_root.mkdir(parents=True, exist_ok=True)
     if args.keep_run_artifacts:
         runs_root.mkdir(parents=True, exist_ok=True)
     failures_root.mkdir(parents=True, exist_ok=True)
@@ -451,7 +522,9 @@ def main() -> int:
 
     def run_dataset(dataset_idx: int) -> dict[str, Any]:
         slot = dataset_slots.get()
+        trial_number = 0
         dataset_id = f"ds_{dataset_idx:04d}"
+        run_id = f"{dataset_id}_trial_{trial_number:04d}"
         worker_root = scratch_root / f"worker_{slot:02d}"
         dataset_dir = worker_root / "data"
         run_dir = worker_root / "run"
@@ -573,6 +646,8 @@ def main() -> int:
             row: dict[str, Any] = {
                 "dataset_id": dataset_id,
                 "dataset_seed": dataset_seed,
+                "trial_number": trial_number,
+                "run_id": run_id,
                 "anneal_seed": anneal_seed,
                 "wall_seconds": t3 - t0,
                 "interaction_seconds": t1 - t0,
@@ -592,12 +667,22 @@ def main() -> int:
                     n_checkpoints=int(annealing_meta["n_checkpoints"]),
                 ),
                 "status": "ok",
+                "state": "COMPLETE",
+                "error": None,
+                "pruned": False,
+                "prune_reason": None,
             }
             row.update({key: native_value(value) for key, value in metrics.items()})
             row["search_score"] = compute_search_score(row)
+            row["segment_precision"] = float(row.get("precision", 0.0))
+            row["segment_recall"] = float(row.get("TPR", 0.0))
+            row["track_fake_rate"] = float(row.get("fake_rate", 0.0))
+            row["objective_metric"] = OBJECTIVE_METRIC
+            row["objective_metric_value"] = float(row["search_score"])
+            row["objective_value"] = float(row["search_score"])
 
             if args.keep_run_artifacts:
-                artifact_dir = runs_root / dataset_id
+                artifact_dir = runs_root / run_id
                 copy_worker_outputs(dataset_dir, run_dir, artifact_dir)
                 row["artifact_dir"] = str(artifact_dir)
 
@@ -611,10 +696,11 @@ def main() -> int:
             )
             return row
         except Exception as exc:
-            failure_dir = failures_root / dataset_id
+            failure_dir = failures_root / run_id
             failure_dir.mkdir(parents=True, exist_ok=True)
             error_payload = {
                 "dataset_id": dataset_id,
+                "run_id": run_id,
                 "slot": slot,
                 "error": str(exc),
             }
@@ -630,7 +716,26 @@ def main() -> int:
             log(f"[{dataset_id}] FAILED: {exc}")
             return {
                 "dataset_id": dataset_id,
+                "dataset_seed": int(args.dataset_seed_start) + dataset_idx,
+                "trial_number": trial_number,
+                "run_id": run_id,
+                "anneal_seed": (
+                    fixed_params["anneal_seed_base"] + dataset_idx
+                    if args.vary_anneal_seed
+                    else fixed_params["anneal_seed_base"]
+                ),
                 "status": "failed",
+                "state": "FAIL",
+                "segment_precision": float("nan"),
+                "segment_recall": float("nan"),
+                "track_efficiency": float("nan"),
+                "track_fake_rate": float("nan"),
+                "n_bifurcations": float("nan"),
+                "objective_metric": OBJECTIVE_METRIC,
+                "objective_metric_value": float("nan"),
+                "objective_value": float("nan"),
+                "pruned": False,
+                "prune_reason": None,
                 "error": str(exc),
             }
         finally:
@@ -649,11 +754,24 @@ def main() -> int:
     total_wall_seconds = time.perf_counter() - started_at
 
     all_rows_df = pd.DataFrame(rows)
+    all_rows_df = _with_sweep_core_columns(all_rows_df)
     all_rows_csv = sweep_root / "all_rows.csv"
-    all_rows_df.sort_values(["status", "dataset_id"]).to_csv(all_rows_csv, index=False)
+    all_rows_df.sort_values(["state", "dataset_id"]).to_csv(all_rows_csv, index=False)
 
-    failed_df = all_rows_df[all_rows_df["status"] != "ok"].copy()
-    ok_df = all_rows_df[all_rows_df["status"] == "ok"].copy()
+    summary_trials_df = all_rows_df.copy()
+    core_first = list(SWEEP_SUMMARY_CORE_COLUMNS)
+    extra_columns = [column for column in summary_trials_df.columns if column not in core_first]
+    summary_trials_df = summary_trials_df[core_first + extra_columns]
+    summary_trials_csv = sweep_root / "summary_trials.csv"
+    summary_trials_df.sort_values(["dataset_id", "run_id"]).to_csv(summary_trials_csv, index=False)
+
+    ensemble_row = _build_ensemble_row(summary_trials_df, datasets=args.datasets)
+    ensemble_trials_df = pd.DataFrame([ensemble_row])
+    ensemble_trials_csv = sweep_root / "ensemble_trials.csv"
+    ensemble_trials_df.to_csv(ensemble_trials_csv, index=False)
+
+    failed_df = all_rows_df[all_rows_df["state"] != "COMPLETE"].copy()
+    ok_df = all_rows_df[all_rows_df["state"] == "COMPLETE"].copy()
 
     if ok_df.empty:
         print("All dataset evaluations failed.", file=sys.stderr)
@@ -695,6 +813,8 @@ def main() -> int:
         "expected_problem_size": expected_problem_size(gen_cfg),
         "fixed_params": fixed_params,
         "aggregate_metrics": aggregate_stats,
+        "objective_metric": OBJECTIVE_METRIC,
+        "objective_statistic": OBJECTIVE_STATISTIC,
         "rates": {
             "zero_bifurcation_rate": float((ok_df["n_bifurcations"] == 0).mean()),
             "fake_rate_below_0_10": float((ok_df["fake_rate"] <= 0.10).mean()),
@@ -712,6 +832,8 @@ def main() -> int:
             ),
         },
         "artifacts": {
+            "summary_trials_csv": str(summary_trials_csv),
+            "ensemble_trials_csv": str(ensemble_trials_csv),
             "all_rows_csv": str(all_rows_csv),
             "per_dataset_csv": str(per_dataset_csv),
             "ranked_csv": str(ranked_csv),
@@ -727,6 +849,8 @@ def main() -> int:
     summary_report = sweep_root / "summary_report.md"
     write_summary_report(summary_report, ok_df, aggregate_stats, summary_payload)
 
+    print(f"Wrote: {summary_trials_csv}")
+    print(f"Wrote: {ensemble_trials_csv}")
     print(f"Wrote: {per_dataset_csv}")
     print(f"Wrote: {aggregate_csv}")
     print(f"Wrote: {summary_json}")
