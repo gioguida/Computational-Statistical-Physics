@@ -50,57 +50,64 @@ def plot_hamiltonian_trace(
 ) -> plt.Figure:
     trace = load_energy_trace(trace_csv)
 
+    # ── style constants (report-friendly light theme) ────────────────────
+    _FIG_BG = "#ffffff"
+    _AX_BG = "#ffffff"
+    _TEXT = "#1f1f1f"
+    _SPINE = "#c8c8c8"
+    _GRID = "#e0e0e0"
+
     fig, (ax_step, ax_temp) = plt.subplots(
         1,
         2,
         figsize=(13.5, 5.4),
-        facecolor="#0e1117",
+        facecolor=_FIG_BG,
     )
 
     for ax in (ax_step, ax_temp):
-        ax.set_facecolor("#0e1117")
-        ax.grid(True, color="#2a2f3a", alpha=0.55, linewidth=0.8)
-        ax.tick_params(colors="#c7d0d9", labelsize=8)
+        ax.set_facecolor(_AX_BG)
+        ax.grid(True, color=_GRID, alpha=0.7, linewidth=0.6)
+        ax.tick_params(colors=_TEXT, labelsize=9)
         for spine in ax.spines.values():
-            spine.set_color("#39414f")
+            spine.set_color(_SPINE)
 
     ax_step.plot(
         trace["step"],
         trace["energy"],
-        color="#4ecdc4",
+        color="#2078b4",
         linewidth=1.8,
         marker="o",
         markersize=3.2,
     )
-    ax_step.set_title("Hamiltonian vs. annealing step", color="white", fontsize=11, pad=10)
-    ax_step.set_xlabel("Annealing step", color="white")
-    ax_step.set_ylabel("Hamiltonian", color="white")
+    ax_step.set_title("Hamiltonian vs. annealing step", color=_TEXT, fontsize=13, pad=10)
+    ax_step.set_xlabel("Annealing step", color=_TEXT, fontsize=11)
+    ax_step.set_ylabel("Hamiltonian $H$", color=_TEXT, fontsize=11)
 
     ax_temp.plot(
         trace["temperature"],
         trace["energy"],
-        color="#ff9f1c",
+        color="#d95f02",
         linewidth=1.8,
         marker="o",
         markersize=3.2,
     )
-    ax_temp.set_title("Hamiltonian vs. temperature", color="white", fontsize=11, pad=10)
-    ax_temp.set_xlabel("Temperature", color="white")
-    ax_temp.set_ylabel("Hamiltonian", color="white")
+    ax_temp.set_title("Hamiltonian vs. temperature", color=_TEXT, fontsize=13, pad=10)
+    ax_temp.set_xlabel("Temperature $T$", color=_TEXT, fontsize=11)
+    ax_temp.set_ylabel("Hamiltonian $H$", color=_TEXT, fontsize=11)
     ax_temp.invert_xaxis()
 
     best_idx = trace["energy"].idxmin()
     best_row = trace.loc[best_idx]
     annotation = (
-        f"min H = {best_row['energy']:.3f}\n"
-        f"step = {int(best_row['step'])}, T = {best_row['temperature']:.3f}\n"
+        f"min $H$ = {best_row['energy']:.3f}\n"
+        f"step = {int(best_row['step'])}, $T$ = {best_row['temperature']:.3f}\n"
         f"selected = {int(best_row['n_selected'])}"
     )
     ax_step.scatter(
         [best_row["step"]],
         [best_row["energy"]],
-        s=46,
-        color="#f94144",
+        s=50,
+        color="#d62728",
         zorder=4,
     )
     ax_step.annotate(
@@ -108,15 +115,15 @@ def plot_hamiltonian_trace(
         xy=(best_row["step"], best_row["energy"]),
         xytext=(10, 12),
         textcoords="offset points",
-        color="white",
-        fontsize=8,
-        bbox={"boxstyle": "round,pad=0.35", "fc": "#161b22", "ec": "#49556a", "alpha": 0.95},
+        color=_TEXT,
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.35", "fc": "#f5f5f5", "ec": _SPINE, "alpha": 0.95},
     )
 
     fig.suptitle(
         "Annealing Hamiltonian Trace",
-        color="white",
-        fontsize=14,
+        color=_TEXT,
+        fontsize=17,
         fontweight="bold",
         y=0.98,
     )

@@ -18,11 +18,22 @@ import pandas as pd
 
 _TRACK_CMAP = plt.cm.tab20
 
+# ── style constants (report-friendly light theme) ──────────────────────────
+_FIG_BG = "#ffffff"
+_AX_BG = "#ffffff"
+_TEXT = "#1f1f1f"
+_SPINE = "#c8c8c8"
+_CIRCLE = "#bdbdbd"
+_FAKE = "#d62728"
+_HIT_EDGE = "#222222"
+_PANEL_TITLE_FS = 13
+_SUPTITLE_FS = 17
+
 
 def _detector_circles(
     ax: plt.Axes,
     radii: Sequence[float],
-    color: str = "#444444",
+    color: str = _CIRCLE,
     ls: str = "--",
     lw: float = 0.8,
 ) -> None:
@@ -32,13 +43,15 @@ def _detector_circles(
 
 
 def _setup_ax(ax: plt.Axes, rmax: float) -> None:
-    ax.set_facecolor("#0e1117")
+    ax.set_facecolor(_AX_BG)
     ax.set_aspect("equal")
     ax.set_xlim(-rmax, rmax)
     ax.set_ylim(-rmax, rmax)
-    ax.tick_params(colors="#888888", labelsize=7)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(bottom=False, left=False, labelbottom=False, labelleft=False)
     for spine in ax.spines.values():
-        spine.set_color("#333333")
+        spine.set_color(_SPINE)
 
 
 # ── ground-truth drawing ────────────────────────────────────────────────────
@@ -55,23 +68,23 @@ def _draw_ground_truth(
     track_ids = sorted(truth_real["track_id"].unique())
     norm = plt.Normalize(vmin=0, vmax=max(n_tracks - 1, 1))
 
-    _detector_circles(ax, detector_radii, color="#555555")
+    _detector_circles(ax, detector_radii)
 
     for tid in track_ids:
         t = truth[truth["track_id"] == tid].sort_values("layer_id")
         c = _TRACK_CMAP(norm(tid))
-        ax.plot(t["hit_x"], t["hit_y"], "-", color=c, lw=1.2, alpha=0.85, zorder=2)
-        ax.scatter(t["hit_x"], t["hit_y"], color=c, s=16, edgecolors="white",
-                   linewidths=0.3, zorder=3)
+        ax.plot(t["hit_x"], t["hit_y"], "-", color=c, lw=1.4, alpha=0.85, zorder=2)
+        ax.scatter(t["hit_x"], t["hit_y"], color=c, s=20, edgecolors=_HIT_EDGE,
+                   linewidths=0.35, zorder=3)
 
     if not truth_fake.empty:
         ax.scatter(
             truth_fake["hit_x"],
             truth_fake["hit_y"],
             marker="x",
-            s=34,
-            color="#ff4d6d",
-            linewidths=1.3,
+            s=38,
+            color=_FAKE,
+            linewidths=1.4,
             zorder=4,
         )
 
@@ -98,16 +111,16 @@ def _draw_reconstructed(
     real_hit_ids = set(truth["hit_id"].tolist())
     fake_hits = hits.loc[~hits["hit_id"].isin(real_hit_ids)].copy()
 
-    _detector_circles(ax, detector_radii, color="#555555")
+    _detector_circles(ax, detector_radii)
 
     if not fake_hits.empty:
         ax.scatter(
             fake_hits["hit_x"],
             fake_hits["hit_y"],
             marker="x",
-            s=34,
-            color="#ff4d6d",
-            linewidths=1.3,
+            s=38,
+            color=_FAKE,
+            linewidths=1.4,
             alpha=0.9,
             zorder=1,
         )
@@ -165,9 +178,9 @@ def _draw_reconstructed(
             if ha in hit_pos.index and hb in hit_pos.index:
                 xa, ya = hit_pos.loc[ha]
                 xb, yb = hit_pos.loc[hb]
-                ax.plot([xa, xb], [ya, yb], "-", color=c, lw=1.2, alpha=0.85, zorder=2)
-                ax.scatter([xa, xb], [ya, yb], color=c, s=16, edgecolors="white",
-                           linewidths=0.3, zorder=3)
+                ax.plot([xa, xb], [ya, yb], "-", color=c, lw=1.4, alpha=0.85, zorder=2)
+                ax.scatter([xa, xb], [ya, yb], color=c, s=20, edgecolors=_HIT_EDGE,
+                           linewidths=0.35, zorder=3)
 
     return n_chains
 
@@ -204,7 +217,7 @@ def plot_tracks(
     rmax = max(detector_radii) * 1.15
 
     fig, (ax_gt, ax_reco) = plt.subplots(
-        1, 2, figsize=(14, 6.5), facecolor="#0e1117",
+        1, 2, figsize=(14, 6.5), facecolor=_FIG_BG,
     )
     _setup_ax(ax_gt, rmax)
     _setup_ax(ax_reco, rmax)
@@ -214,7 +227,7 @@ def plot_tracks(
     n_true = truth["track_id"].nunique()
     ax_gt.set_title(
         f"Ground truth  ({n_true} tracks)",
-        color="white", fontsize=11, pad=10,
+        color=_TEXT, fontsize=_PANEL_TITLE_FS, pad=10,
     )
 
     # ── right: reconstruction ───────────────────────────────────────────────
@@ -222,13 +235,13 @@ def plot_tracks(
     n_sel = int((state["selected"] == 1).sum())
     n_fake = int((~hits["hit_id"].isin(set(truth["hit_id"].tolist()))).sum())
     ax_reco.set_title(
-        f"Reconstructed  ({n_reco} chains, {n_sel} segments, fake x = {n_fake})",
-        color="white", fontsize=11, pad=10,
+        f"Reconstructed  ({n_reco} chains, {n_sel} segments)",
+        color=_TEXT, fontsize=_PANEL_TITLE_FS, pad=10,
     )
 
     fig.suptitle(
         "Track Reconstruction — Ground Truth vs. Annealing",
-        color="white", fontsize=14, fontweight="bold", y=0.97,
+        color=_TEXT, fontsize=_SUPTITLE_FS, fontweight="bold", y=0.97,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.93])
 

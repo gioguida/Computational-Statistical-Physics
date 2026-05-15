@@ -81,31 +81,40 @@ def plot_annealing_state_animation(
             f"segments.csv has {len(segment_lines)} segments"
         )
 
+    _FIG_BG = "#ffffff"
+    _AX_BG = "#ffffff"
+    _TEXT = "#1f1f1f"
+    _SPINE = "#c8c8c8"
+    _CIRCLE = "#bdbdbd"
+    _FAKE = "#d62728"
+
     rmax = max(detector_radii) * 1.15
-    fig, ax = plt.subplots(figsize=(7.5, 7.0), facecolor="#0e1117")
-    ax.set_facecolor("#0e1117")
+    fig, ax = plt.subplots(figsize=(7.5, 7.0), facecolor=_FIG_BG)
+    ax.set_facecolor(_AX_BG)
     ax.set_aspect("equal")
     ax.set_xlim(-rmax, rmax)
     ax.set_ylim(-rmax, rmax)
-    ax.tick_params(colors="#888888", labelsize=7)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(bottom=False, left=False, labelbottom=False, labelleft=False)
     for spine in ax.spines.values():
-        spine.set_color("#333333")
+        spine.set_color(_SPINE)
 
-    _detector_circles(ax, detector_radii, color="#555555")
-    ax.scatter(hits["hit_x"], hits["hit_y"], s=9, color="#9ba3af", alpha=0.35, zorder=1)
+    _detector_circles(ax, detector_radii, color=_CIRCLE)
+    ax.scatter(hits["hit_x"], hits["hit_y"], s=9, color="#b0b0b0", alpha=0.4, zorder=1)
     if not fake_hits.empty:
         ax.scatter(
             fake_hits["hit_x"],
             fake_hits["hit_y"],
             marker="x",
-            s=28,
-            color="#ff4d6d",
-            linewidths=1.1,
+            s=32,
+            color=_FAKE,
+            linewidths=1.2,
             alpha=0.95,
             zorder=2,
         )
 
-    selected_collection = LineCollection([], colors="#4ecdc4", linewidths=1.4, alpha=0.95, zorder=3)
+    selected_collection = LineCollection([], colors="#2078b4", linewidths=1.4, alpha=0.9, zorder=3)
     ax.add_collection(selected_collection)
 
     info_text = ax.text(
@@ -115,11 +124,11 @@ def plot_annealing_state_animation(
         transform=ax.transAxes,
         va="top",
         ha="left",
-        color="white",
+        color=_TEXT,
         fontsize=9,
-        bbox={"boxstyle": "round,pad=0.3", "fc": "#161b22", "ec": "#49556a", "alpha": 0.95},
+        bbox={"boxstyle": "round,pad=0.3", "fc": "#f5f5f5", "ec": _SPINE, "alpha": 0.95},
     )
-    ax.set_title("Annealing State Evolution", color="white", fontsize=12, pad=10)
+    ax.set_title("Annealing State Evolution", color=_TEXT, fontsize=13, pad=10)
 
     def _update(frame_idx: int):
         spin_row = spins[frame_idx]

@@ -132,14 +132,14 @@ def main() -> int:
         segments_csv=segments_csv,
         final_state_csv=final_state_csv,
         detector_radii=detector_radii,
-        out_path=plot_dir / "tracks.png",
+        out_path=plot_dir / "tracks.pdf",
     )
 
     if energy_trace_csv.exists():
         print("Generating Hamiltonian trace plot...")
         plot_hamiltonian_trace(
             trace_csv=energy_trace_csv,
-            out_path=plot_dir / "hamiltonian_trace.png",
+            out_path=plot_dir / "hamiltonian_trace.pdf",
         )
     else:
         print("Skipping Hamiltonian trace plot: missing energy_trace.csv")
