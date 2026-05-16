@@ -168,7 +168,10 @@ def generate_dataset(cfg: DataConfig, seed: int, out_dir: Path) -> tuple[Path, P
 
     fake_rows: list[dict[str, Any]] = []
     for layer_id, layer_radius in enumerate(cfg.detector_layers):
-        n_fake = int(rng.poisson(lam=cfg.mean_fakes_per_layer))
+        if cfg.mean_fakes_per_layer >= 0:
+            n_fake = int(rng.poisson(lam=cfg.mean_fakes_per_layer))
+        else:
+            n_fake = 0
         angles = rng.uniform(0.0, 2.0 * np.pi, n_fake)
         x_fake = layer_radius * np.cos(angles)
         y_fake = layer_radius * np.sin(angles)
