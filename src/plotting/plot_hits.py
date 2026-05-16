@@ -34,6 +34,72 @@ _LAYER_CMAP = plt.cm.viridis
 _TRACK_CMAP = plt.cm.tab20
 
 
+def _unwrap_angles(angles: np.ndarray) -> np.ndarray:
+    """Unwrap angles with minimal jumps, preserving the original ordering."""
+    if angles.size == 0:
+        return angles
+    out = np.empty_like(angles)
+    out[0] = angles[0]
+    for i in range(1, angles.size):
+        delta = (angles[i] - out[i - 1] + np.pi) % (2 * np.pi) - np.pi
+        out[i] = out[i - 1] + delta
+    return out
+
+
+def _draw_ground_truth_arcs(
+    ax: plt.Axes,
+    truth_real: pd.DataFrame,
+    track_norm: plt.Normalize,
+) -> None:
+    """
+    Draw fitted circular trajectory arcs for each true track.
+
+    The generation model produces circles passing through the interaction point
+    (origin). For each track we fit the circle center from hit coordinates and
+    draw the arc from origin to the outermost hit.
+    """
+    if truth_real.empty:
+        return
+
+    sort_col = "layer_radius" if "layer_radius" in truth_real.columns else "layer_id"
+
+    for track_id, track_hits in truth_real.groupby("track_id", sort=True):
+        t = track_hits.sort_values(sort_col)
+        xy = t[["hit_x", "hit_y"]].to_numpy(dtype=float)
+        if xy.shape[0] < 2:
+            continue
+
+        # Circle fit with origin-on-circle constraint:
+        # |p - c|^2 = |c|^2  ->  2 p·c = |p|^2
+        A = 2.0 * xy
+        b = np.sum(xy * xy, axis=1)
+        center, _, rank, _ = np.linalg.lstsq(A, b, rcond=None)
+        if rank < 2:
+            continue
+
+        cx, cy = float(center[0]), float(center[1])
+        radius = float(np.hypot(cx, cy))
+        if radius <= 0:
+            continue
+
+        theta_hits = np.arctan2(xy[:, 1] - cy, xy[:, 0] - cx)
+        theta_hits = _unwrap_angles(theta_hits)
+
+        # Include origin so the arc represents the trajectory itself, not only
+        # the detector-crossing segment.
+        theta_origin = float(np.arctan2(-cy, -cx))
+        delta = (theta_hits[0] - theta_origin + np.pi) % (2 * np.pi) - np.pi
+        theta_start = theta_hits[0] - delta
+        theta_end = theta_hits[-1]
+
+        arc_theta = np.linspace(theta_start, theta_end, 180)
+        arc_x = cx + radius * np.cos(arc_theta)
+        arc_y = cy + radius * np.sin(arc_theta)
+
+        c = _TRACK_CMAP(track_norm(track_id))
+        ax.plot(arc_x, arc_y, color=c, lw=1.0, alpha=0.7, zorder=2)
+
+
 def _detector_circles(
     ax: plt.Axes,
     radii: Sequence[float],
@@ -123,6 +189,7 @@ def plot_hits(
     truth_fake = truth.loc[truth["track_id"] < 0].copy()
     n_tracks = truth_real["track_id"].nunique()
     track_norm = plt.Normalize(vmin=0, vmax=max(n_tracks - 1, 1))
+    _draw_ground_truth_arcs(ax_truth, truth_real, track_norm)
     if not truth_real.empty:
         colours_track = _TRACK_CMAP(track_norm(truth_real["track_id"].values))
         ax_truth.scatter(

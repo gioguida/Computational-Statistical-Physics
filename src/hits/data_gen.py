@@ -88,7 +88,10 @@ def main():
     # generate fake hits due to noise
     fake_rows = []
     for layer_id, layer_radius in enumerate(cfg.detector_layers):
-        n_fake = np.random.poisson(lam=cfg.mean_fakes_per_layer)
+        if cfg.mean_fakes_per_layer >= 0:
+            n_fake = np.random.poisson(lam=cfg.mean_fakes_per_layer)
+        else:
+            n_fake = 0
         angles = np.random.uniform(0, 2 * np.pi, n_fake)
         x_fake = layer_radius * np.cos(angles)
         y_fake = layer_radius * np.sin(angles)

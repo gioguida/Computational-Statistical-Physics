@@ -22,34 +22,52 @@ generation:
     traj_radius_low: 4
     traj_radius_high: 20
     detector_layers: [1, 2, 3, 4, 5]
-    sigma_res: 0.0 # 0.05
-    mean_fakes_per_layer: 2.0 # 2
+    sigma_res: 0.00 # 0.05
+    mean_fakes_per_layer: -1 # 2
 
 interaction:
-  theta_max: 0.6445311067552775
-  merge_penalty: 10.0
-  fork_penalty: 10.0
-  angle_penalty: 2.9083282328787976
-  layer01_radial_penalty: 3.3312796335998174
-  curvature_bonus: 0.5714182333135007
-  curvature_penalty: 0.5548262095768024
-  curvature_tolerance: 0.020503328360057898
+  theta_max: 0.4806204627426559
+  merge_penalty: 19.257875818571055
+  fork_penalty: 5.9543839764317
+  angle_penalty: 1.259240724503271
+  layer01_radial_penalty: 3.483472891007594
+  curvature_bonus: 0.0841125560496282
+  curvature_penalty: 0.3284012286808885
+  curvature_tolerance: 0.1417516502157077
+  # previous interaction hyperparameters
+  # theta_max: 0.6445311067552775
+  # merge_penalty: 10.0
+  # fork_penalty: 10.0
+  # angle_penalty: 2.9083282328787976
+  # layer01_radial_penalty: 3.3312796335998174
+  # curvature_bonus: 0.5714182333135007
+  # curvature_penalty: 0.5548262095768024
+  # curvature_tolerance: 0.020503328360057898
 
 annealing:
   cooling_schedule: linear  # geometric | linear
   t_min: 0.001
-  t_max: 4.0
-  n_steps: 600
+  t_max: 4.165275951324902
+  n_steps: 300
+  length_penalty: 0.3026209293247081
+  layer01_radial_tolerance: 0.38871820194666795
+  eq_sweeps: 150
+  curvature_bonus: 0.0841125560496282
+  curvature_penalty: 0.3284012286808885
+  curvature_tolerance: 0.1417516502157077
   checkpoint_every_steps: 10
   toll: 1e-08
-  length_penalty: 0.13124396574410624
-  layer01_radial_tolerance: 0.28557027306016236
-  eq_sweeps: 100
   log_every_steps: 100
   seed: 42
-  curvature_bonus: 0.5714182333135007
-  curvature_penalty: 0.5548262095768024
-  curvature_tolerance: 0.020503328360057898
+  # previous annealing hyperparameters
+  # t_max: 4.0
+  # n_steps: 600
+  # length_penalty: 0.13124396574410624
+  # layer01_radial_tolerance: 0.28557027306016236
+  # eq_sweeps: 100
+  # curvature_bonus: 0.5714182333135007
+  # curvature_penalty: 0.5548262095768024
+  # curvature_tolerance: 0.020503328360057898
 
 plotting:
   create_annealing_animation: false

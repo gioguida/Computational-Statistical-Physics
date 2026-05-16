@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,49 @@ except ImportError as exc:
 def run_cmd(cmd: list[str], cwd: Path) -> None:
     print("$", " ".join(cmd))
     subprocess.run(cmd, cwd=cwd, check=True)
+
+
+def _normalize_for_cache_compare(path_str: str) -> str:
+    """Normalize paths for robust CMake cache comparison across slash/case styles."""
+    return path_str.replace("\\", "/").rstrip("/").lower()
+
+
+def _cache_source_dir(cache_path: Path) -> str | None:
+    if not cache_path.exists():
+        return None
+    with cache_path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith("CMAKE_HOME_DIRECTORY:INTERNAL="):
+                return line.split("=", 1)[1].strip()
+    return None
+
+
+def _clear_stale_cmake_cache(build_dir: Path, project_root: Path) -> None:
+    """
+    Clear CMake cache artifacts if they were generated for another source path.
+
+    This avoids failures when switching between Windows and WSL path styles
+    while reusing the same build directory.
+    """
+    cache_path = build_dir / "CMakeCache.txt"
+    cached_home = _cache_source_dir(cache_path)
+    if cached_home is None:
+        return
+
+    current_home = str(project_root.resolve())
+    if _normalize_for_cache_compare(cached_home) == _normalize_for_cache_compare(current_home):
+        return
+
+    print("Detected stale CMake cache with a different source path.")
+    print(f"  cached:  {cached_home}")
+    print(f"  current: {current_home}")
+    print(f"  clearing cache artifacts in {build_dir}")
+
+    if cache_path.exists():
+        cache_path.unlink()
+    cmake_files = build_dir / "CMakeFiles"
+    if cmake_files.exists():
+        shutil.rmtree(cmake_files)
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -59,6 +103,7 @@ def resolve_switches(cfg: dict[str, Any]) -> dict[str, bool]:
 
 
 def cmake_build(project_root: Path, build_dir: Path) -> None:
+    _clear_stale_cmake_cache(build_dir, project_root)
     run_cmd(["cmake", "-S", ".", "-B", str(build_dir)], cwd=project_root)
     run_cmd(["cmake", "--build", str(build_dir), "-j"], cwd=project_root)
 
