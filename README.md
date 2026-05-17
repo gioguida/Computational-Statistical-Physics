@@ -2,6 +2,31 @@
 
 This README is a practical runbook to execute and verify the project, both locally and on the Euler cluster.
 
+## Project Overview
+
+This project studies particle track reconstruction in a simplified detector setting by casting it as a combinatorial optimization problem.  
+Hits on concentric detector layers are connected into candidate segments, and those segments are encoded in a spin-glass / Ising-style energy model.
+
+The objective is to select a globally consistent set of segments that forms plausible tracks while discouraging conflicts such as forks and merges.  
+The optimization is solved with simulated annealing in C++, while Python orchestrates data generation, experiment management, and metrics/plots.
+
+In practical terms, the workflow is:
+
+1. Generate synthetic detector hits (clean ground truth + noisy training hits).
+2. Build candidate segments and pairwise couplings between segments.
+3. Minimize the resulting energy with simulated annealing.
+4. Compare reconstructed tracks against ground truth with precision/recall- and efficiency-based metrics.
+
+The key modeling idea is that compatible segment pairs receive favorable couplings, while incompatible combinations (for example multiple segment continuations through the same hit) are penalized.  
+A low-energy state should therefore correspond to a physically coherent set of tracks.
+
+## Method At A Glance
+
+- `src/hits/`: synthetic data generation for layered detector hits.
+- `src/interaction/`: construction of segment graph and sparse coupling matrix.
+- `src/annealing/`: C++ simulated annealing solver over binary segment-selection variables.
+- `src/eval/` and `src/plotting/`: quantitative evaluation and visual diagnostics.
+
 ## What To Run First (Fast Verification)
 
 From the project root:
