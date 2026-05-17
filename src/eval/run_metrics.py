@@ -13,7 +13,7 @@ except ImportError as exc:
     ) from exc
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = _SCRIPT_DIR.parent
+PROJECT_ROOT = _SCRIPT_DIR.parents[1]
 os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -43,7 +43,7 @@ def main() -> int:
 
     cli_run_id = sys.argv[1].strip() if len(sys.argv) > 1 else None
     if len(sys.argv) > 2:
-        raise ValueError("Usage: python scripts/run_metrics.py [run_id]")
+        raise ValueError("Usage: python src/eval/run_metrics.py [run_id]")
 
     if cli_run_id:
         run_dir = (results_root / cli_run_id).resolve()

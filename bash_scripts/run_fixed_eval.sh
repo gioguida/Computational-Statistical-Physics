@@ -2,7 +2,7 @@
 #SBATCH --job-name=fixed-config-eval
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=48
 #SBATCH --time=08:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
@@ -23,8 +23,8 @@ export NUMEXPR_NUM_THREADS=1
 export MPLBACKEND=Agg
 export MPLCONFIGDIR="${PROJECT_ROOT}/.mplconfig"
 
-MAX_WORKERS=64
-WORKERS=64
+MAX_WORKERS=48
+WORKERS=48
 if (( WORKERS > MAX_WORKERS )); then
   WORKERS="$MAX_WORKERS"
 fi

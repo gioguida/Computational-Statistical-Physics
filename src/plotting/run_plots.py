@@ -3,10 +3,10 @@
 Plotting entry-point.
 
 Usage:
-    python scripts/run_plots.py
-    python scripts/run_plots.py <run_id>
-    python scripts/run_plots.py --state lowest
-    python scripts/run_plots.py <run_id> --state lowest
+    python src/plotting/run_plots.py
+    python src/plotting/run_plots.py <run_id>
+    python src/plotting/run_plots.py --state lowest
+    python src/plotting/run_plots.py <run_id> --state lowest
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = _SCRIPT_DIR.parent
+PROJECT_ROOT = _SCRIPT_DIR.parents[1]
 os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
 
 sys.path.insert(0, str(PROJECT_ROOT))

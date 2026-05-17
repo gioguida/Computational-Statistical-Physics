@@ -2,7 +2,7 @@
 #SBATCH --job-name=sweep
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=48
 #SBATCH --time=12:00:00
 #SBATCH --constraint=EPYC_7763
 #SBATCH --mem-per-cpu=512
@@ -30,19 +30,19 @@ fi
 
 # Build once
 cmake -S . -B build
-cmake --build build -j 64
+cmake --build build -j 48
 
 # Dataset-ensemble Bayesian optimization sweep.
 # --workers controls concurrent Optuna trials.
 # --ensemble-workers controls concurrent dataset evaluations inside each trial.
-# Keep workers * ensemble-workers <= 128 for this Slurm allocation.
+# Keep workers * ensemble-workers <= 48 for this Slurm allocation.
 # Pruning is off by default; add --pruning to enable Optuna median pruning.
 uv run scripts/run_dataset_sweep.py \
   --config scripts/config.yaml \
   "${RUNS_ROOT_BASE_ARGS[@]}" \
   --datasets 16 \
   --trials-per-dataset 80 \
-  --workers 8 \
+  --workers 6 \
   --ensemble-workers 8 \
   --seeds-start 1000 \
   --objective-metric track_efficiency \

@@ -218,6 +218,18 @@ def run_annealing_stage(
         cwd=project_root,
     )
 
+
+def run_post_processing(project_root: Path, run_id: str) -> None:
+    run_cmd(
+        [sys.executable, str(project_root / "src/plotting/run_plots.py"), run_id],
+        cwd=project_root,
+    )
+    run_cmd(
+        [sys.executable, str(project_root / "src/eval/run_metrics.py"), run_id],
+        cwd=project_root,
+    )
+
+
 def main() -> int:
     if len(sys.argv) != 1:
         raise SystemExit(
@@ -298,6 +310,7 @@ def main() -> int:
             first_gap,
             layer01_radial_penalty,
         )
+        run_post_processing(project_root, run_id)
 
     print(f"Run id: {run_id}")
     print(f"Run folder: {run_root}")

@@ -22,10 +22,11 @@ generation:
     traj_radius_low: 4
     traj_radius_high: 20
     detector_layers: [1, 2, 3, 4, 5]
-    sigma_res: 0.00 # 0.05
-    mean_fakes_per_layer: -1 # 2
+    sigma_res: 0.05 # 0.05
+    mean_fakes_per_layer: 2 # 2
 
 interaction:
+# Noisy model hyperparameters
   theta_max: 0.4806204627426559
   merge_penalty: 19.257875818571055
   fork_penalty: 5.9543839764317
@@ -34,7 +35,7 @@ interaction:
   curvature_bonus: 0.0841125560496282
   curvature_penalty: 0.3284012286808885
   curvature_tolerance: 0.1417516502157077
-  # previous interaction hyperparameters
+# Noise-free model hyperparameters
   # theta_max: 0.6445311067552775
   # merge_penalty: 10.0
   # fork_penalty: 10.0
@@ -47,6 +48,7 @@ interaction:
 annealing:
   cooling_schedule: linear  # geometric | linear
   t_min: 0.001
+# Noisy model hyperparameters
   t_max: 4.165275951324902
   n_steps: 300
   length_penalty: 0.3026209293247081
@@ -55,11 +57,7 @@ annealing:
   curvature_bonus: 0.0841125560496282
   curvature_penalty: 0.3284012286808885
   curvature_tolerance: 0.1417516502157077
-  checkpoint_every_steps: 10
-  toll: 1e-08
-  log_every_steps: 100
-  seed: 42
-  # previous annealing hyperparameters
+# Noise-free model hyperparameters
   # t_max: 4.0
   # n_steps: 600
   # length_penalty: 0.13124396574410624
@@ -68,6 +66,11 @@ annealing:
   # curvature_bonus: 0.5714182333135007
   # curvature_penalty: 0.5548262095768024
   # curvature_tolerance: 0.020503328360057898
+  
+  checkpoint_every_steps: 10
+  toll: 1e-08
+  log_every_steps: 100
+  seed: 42
 
 plotting:
   create_annealing_animation: false

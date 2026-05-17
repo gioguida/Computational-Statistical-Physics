@@ -1,4 +1,4 @@
-#include "../src/annealing/annealing.hpp"
+#include "annealing.hpp"
 
 #include <filesystem>
 #include <fstream>

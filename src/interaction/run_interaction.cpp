@@ -1,4 +1,4 @@
-#include "../src/interaction/interaction.hpp"
+#include "interaction.hpp"
 
 #include <cmath>
 #include <filesystem>
