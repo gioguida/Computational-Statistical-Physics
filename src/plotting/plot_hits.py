@@ -4,15 +4,6 @@ Purpose: Plotting and visualization utilities for results analysis.
 Usage: Run after data/results are generated to produce figures.
 """
 
-"""
-Detector & Hits Visualisation
-──────────────────────────────
-Draws the concentric detector layers and overlays every recorded hit.
-Two panels:
-  • Left  – training hits coloured by detector layer
-  • Right – ground-truth hits coloured by particle track
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

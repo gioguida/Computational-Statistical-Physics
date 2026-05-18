@@ -4,14 +4,6 @@ Purpose: Plotting and visualization utilities for results analysis.
 Usage: Run after data/results are generated to produce figures.
 """
 
-"""
-Track Reconstruction Visualisation
-────────────────────────────────────
-Side-by-side comparison:
-  • Left  – ground-truth tracks (hits connected by track_id)
-  • Right – reconstructed tracks (selected segments from simulated annealing)
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

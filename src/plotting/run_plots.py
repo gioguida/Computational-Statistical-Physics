@@ -4,16 +4,11 @@
 File: src/plotting/run_plots.py
 Purpose: Plotting and visualization utilities for results analysis.
 Usage: Run after data/results are generated to produce figures.
-"""
-
-"""
-Plotting entry-point.
-
-Usage:
-    python src/plotting/run_plots.py
-    python src/plotting/run_plots.py <run_id>
-    python src/plotting/run_plots.py --state lowest
-    python src/plotting/run_plots.py <run_id> --state lowest
+Additional usage:
+  python src/plotting/run_plots.py
+  python src/plotting/run_plots.py <run_id>
+  python src/plotting/run_plots.py --state lowest
+  python src/plotting/run_plots.py <run_id> --state lowest
 """
 
 from __future__ import annotations
