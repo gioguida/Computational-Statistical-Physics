@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# File: bash_scripts/run_sweep.sh
+# Purpose: Shell entry points for recurring experiment workflows.
+# Usage: Execute in a Unix-like shell with project dependencies available.
+
 #SBATCH --job-name=sweep
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

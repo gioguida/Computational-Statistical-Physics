@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# File: bash_scripts/run_fixed_eval.sh
+# Purpose: Shell entry points for recurring experiment workflows.
+# Usage: Execute in a Unix-like shell with project dependencies available.
+
 #SBATCH --job-name=fixed-config-eval
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

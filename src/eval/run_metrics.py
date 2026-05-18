@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+"""
+File: src/eval/run_metrics.py
+Purpose: Evaluation metric computation for experiment outputs.
+Usage: Run after experiments to generate metric summaries.
+"""
+
 from __future__ import annotations
 
 import os

@@ -1,3 +1,7 @@
+// File: src/interaction/interaction.hpp
+// Purpose: Interaction-term modeling for the optimization objective.
+// Usage: Build and run as part of the physics/optimization pipeline.
+
 #ifndef INTERACTION_HPP
 #define INTERACTION_HPP
 

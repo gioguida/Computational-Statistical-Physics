@@ -1,3 +1,7 @@
+<!-- File: README.md
+Purpose: Project overview, setup instructions, and execution entry points.
+Usage: Read this first before building binaries or running scripts. -->
+
 # Particle Track Reconstruction as a Spin-Glass Optimization Problem
 
 This README is a practical runbook to execute and verify the project, both locally and on the Euler cluster.
@@ -27,6 +31,46 @@ A low-energy state should therefore correspond to a physically coherent set of t
 - `src/annealing/`: C++ simulated annealing solver over binary segment-selection variables.
 - `src/eval/` and `src/plotting/`: quantitative evaluation and visual diagnostics.
 
+## Configuration: Noise Model vs Noise-Free Model
+
+All runtime parameters are controlled by [scripts/config.yaml](scripts/config.yaml).
+
+The `interaction` and `annealing` sections each contain **two mutually exclusive sets of hyperparameters**: one tuned for the **noisy model** (with fake hits) and one for the **noise-free model** (clean hits only). Exactly one set must be active at a time — switch between them by commenting/uncommenting the relevant lines.
+
+**Noisy model (default — active):**
+```yaml
+interaction:
+  theta_max: 0.4806204627426559
+  merge_penalty: 19.257875818571055
+  # ... (uncommented)
+
+annealing:
+  t_max: 4.165275951324902
+  n_steps: 300
+  # ... (uncommented)
+```
+
+**Noise-free model (inactive by default):**
+```yaml
+interaction:
+  # theta_max: 0.6445311067552775
+  # merge_penalty: 10.0
+  # ... (commented out)
+
+annealing:
+  # t_max: 4.0
+  # n_steps: 600
+  # ... (commented out)
+```
+
+To switch to the noise-free model:
+1. Open [scripts/config.yaml](scripts/config.yaml).
+2. In the `interaction` section: comment out the noisy-model lines and uncomment the noise-free-model lines.
+3. Do the same in the `annealing` section.
+4. Set `generation.data.mean_fakes_per_layer: -1` to disable fake-hit injection.
+
+> **Important:** both `interaction` and `annealing` must use the same model's hyperparameters — mixing them will produce incorrect results.
+
 ## What To Run First (Fast Verification)
 
 From the project root:
@@ -42,7 +86,34 @@ If this command completes, the core pipeline works end-to-end (build, data gener
 - Python >= 3.12
 - CMake >= 3.15
 - C++17 compiler
-- `uv` available (`pip install uv`)
+
+## Running the Code: `uv` or Standard `pip`
+
+Both workflows are supported.
+
+**Option A — `uv` (recommended):** installs dependencies automatically from `pyproject.toml`.
+
+```bash
+pip install uv
+uv run python scripts/control_panel.py
+```
+
+Prefix every `python` command with `uv run` and no manual environment setup is needed.
+
+**Option B — standard pip:** create a virtual environment, install from `requirements.txt`, then run scripts directly.
+
+```bash
+python -m venv .venv
+# Linux/macOS:
+source .venv/bin/activate
+# Windows:
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+python scripts/control_panel.py
+```
+
+All subsequent `python` commands in this README can be used as-is once the environment is activated.
 
 ## Repository Entry Points
 

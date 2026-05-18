@@ -1,3 +1,9 @@
+"""
+File: src/plotting/metrics.py
+Purpose: Plotting and visualization utilities for results analysis.
+Usage: Run after data/results are generated to produce figures.
+"""
+
 from __future__ import annotations
 
 import json

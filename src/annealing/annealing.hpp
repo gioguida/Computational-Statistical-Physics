@@ -1,3 +1,7 @@
+// File: src/annealing/annealing.hpp
+// Purpose: Simulated annealing solver and related native interfaces.
+// Usage: Build and invoke from C++ binaries or Python orchestration layers.
+
 #ifndef MAIN_SIMULATION_HPP
 #define MAIN_SIMULATION_HPP
 

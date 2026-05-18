@@ -1,3 +1,7 @@
+// File: src/annealing/spinglass.hpp
+// Purpose: Simulated annealing solver and related native interfaces.
+// Usage: Build and invoke from C++ binaries or Python orchestration layers.
+
 #ifndef SPINGLASS_HPP
 #define SPINGLASS_HPP
 

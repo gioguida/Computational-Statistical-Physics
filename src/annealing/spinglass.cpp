@@ -1,3 +1,7 @@
+// File: src/annealing/spinglass.cpp
+// Purpose: Simulated annealing solver and related native interfaces.
+// Usage: Build and invoke from C++ binaries or Python orchestration layers.
+
 #include "spinglass.hpp"
 #include <cmath>
 

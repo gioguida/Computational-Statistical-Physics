@@ -1,4 +1,10 @@
 """
+File: src/plotting/plot_tracks.py
+Purpose: Plotting and visualization utilities for results analysis.
+Usage: Run after data/results are generated to produce figures.
+"""
+
+"""
 Track Reconstruction Visualisation
 ────────────────────────────────────
 Side-by-side comparison:

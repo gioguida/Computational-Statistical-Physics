@@ -1,3 +1,7 @@
+# File: pyproject.toml
+# Purpose: Python project metadata and tooling configuration.
+# Usage: Used by Python packaging and environment tooling.
+
 [project]
 name = "particle_track_reconstruction"
 version = "0.1.0"

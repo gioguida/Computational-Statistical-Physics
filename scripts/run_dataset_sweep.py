@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+"""
+File: scripts/run_dataset_sweep.py
+Purpose: Automation scripts and runtime configuration.
+Usage: Run from repository root with configured environment.
+"""
+
 from __future__ import annotations
 
 import argparse

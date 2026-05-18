@@ -1,3 +1,7 @@
+# File: requirements.txt
+# Purpose: Pinned or constrained Python dependencies.
+# Usage: Install with pip before running Python code.
+
 numpy>=2.4.4
 pandas>=3.0.2
 pyyaml>=6.0.2

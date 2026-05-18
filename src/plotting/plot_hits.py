@@ -1,4 +1,10 @@
 """
+File: src/plotting/plot_hits.py
+Purpose: Plotting and visualization utilities for results analysis.
+Usage: Run after data/results are generated to produce figures.
+"""
+
+"""
 Detector & Hits Visualisation
 ──────────────────────────────
 Draws the concentric detector layers and overlays every recorded hit.

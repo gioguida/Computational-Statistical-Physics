@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+"""
+File: src/plotting/run_plots.py
+Purpose: Plotting and visualization utilities for results analysis.
+Usage: Run after data/results are generated to produce figures.
+"""
+
 """
 Plotting entry-point.
 

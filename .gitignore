@@ -1,3 +1,7 @@
+# File: .gitignore
+# Purpose: Ignore rules for generated/local files.
+# Usage: Update when new artifacts should stay out of version control.
+
 # ------------------------------
 # Data 
 # ------------------------------

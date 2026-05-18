@@ -1,3 +1,7 @@
+# File: CMakeLists.txt
+# Purpose: CMake build definition for native C++ components.
+# Usage: Configure/build with CMake to compile executables.
+
 cmake_minimum_required(VERSION 3.16)
 project(particle_track_reconstruction LANGUAGES CXX)
 

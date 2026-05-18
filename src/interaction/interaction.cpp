@@ -1,3 +1,7 @@
+// File: src/interaction/interaction.cpp
+// Purpose: Interaction-term modeling for the optimization objective.
+// Usage: Build and run as part of the physics/optimization pipeline.
+
 #include "interaction.hpp"
 
 #include <iostream>

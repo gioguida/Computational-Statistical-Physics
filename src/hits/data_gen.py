@@ -1,3 +1,9 @@
+"""
+File: src/hits/data_gen.py
+Purpose: Hit generation and hit-processing logic.
+Usage: Import from Python workflows that generate/process event data.
+"""
+
 import numpy as np
 import pandas as pd
 from pathlib import Path

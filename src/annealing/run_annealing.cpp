@@ -1,3 +1,7 @@
+// File: src/annealing/run_annealing.cpp
+// Purpose: Simulated annealing solver and related native interfaces.
+// Usage: Build and invoke from C++ binaries or Python orchestration layers.
+
 #include "annealing.hpp"
 
 #include <filesystem>
